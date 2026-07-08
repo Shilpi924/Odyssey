@@ -36,7 +36,7 @@ export default function HomeSearchBar() {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Ask Travel Buddy to find anything..."
+          placeholder="Ask Odyssey to find anything..."
           className="w-full bg-slate-800/80 backdrop-blur-md border border-slate-600 rounded-full pl-6 pr-16 py-4 text-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xl transition-all"
         />
         <button

@@ -12,7 +12,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "Travel Buddy",
+  title: "Odyssey",
   description: "AI-powered hiking and travel companion",
   manifest: "/manifest.json",
 };

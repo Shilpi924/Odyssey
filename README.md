@@ -1,8 +1,8 @@
-# 🥾 Travel Buddy (Odyssey)
+# 🥾 Odyssey
 
-An AI-powered, millennial-focused hiking and travel companion that provides hyper-personalized trail recommendations, live GPS tracking, and robust offline support. 
+An advanced, AI-powered travel and hiking companion designed to provide highly personalized recommendations based on a user's unique profile, current weather, and group dynamics. 
 
-Travel Buddy moves beyond simple keyword searches. It uses a **LangGraph-based routing architecture** to intelligently decide when to fetch fast results and when to perform deep, personalized AI analysis based on your group dynamics, weather, and specific preferences.
+Odyssey moves beyond simple keyword searches. It uses a **LangGraph-based routing architecture** to intelligently decide when to fetch fast results and when to perform deep, personalized AI analysis based on your group dynamics, weather, and specific preferences.
 
 ---
 
@@ -44,8 +44,8 @@ Travel Buddy moves beyond simple keyword searches. It uses a **LangGraph-based r
 
 ### 1. Clone & Install
 ```bash
-git clone https://github.com/your-username/travel-buddy.git
-cd travel-buddy
+git clone https://github.com/your-username/odyssey.git
+cd odyssey
 npm install
 ```
 

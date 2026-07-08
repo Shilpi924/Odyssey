@@ -1,6 +1,6 @@
 {
-  "name": "Travel Buddy",
-  "short_name": "TravelBuddy",
+  "name": "Odyssey",
+  "short_name": "Odyssey",
   "description": "Your AI-powered hiking and travel companion.",
   "start_url": "/",
   "display": "standalone",
