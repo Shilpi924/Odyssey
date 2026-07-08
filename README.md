@@ -10,7 +10,6 @@
   <img src="https://img.shields.io/badge/Next.js-15+-black?style=for-the-badge&logo=next.js&logoColor=white" alt="Next.js" />
   <img src="https://img.shields.io/badge/LangGraph-AI-blue?style=for-the-badge" alt="LangGraph" />
   <img src="https://img.shields.io/badge/Claude-3.5-purple?style=for-the-badge" alt="Claude AI" />
-  <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="MIT License" />
 </div>
 
 <br />
@@ -88,4 +87,4 @@ Navigate to `http://localhost:3007` to view the app.
 ---
 
 ## 📄 License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is proprietary. All Rights Reserved. You may not use, copy, distribute, or modify this code without explicit written permission.
