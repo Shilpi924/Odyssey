@@ -53,21 +53,38 @@ async function fetchWeather(lat, lng) {
 }
 
 function buildUserContext(preferences) {
-  const { hiking = {}, activityLevel, travelWith, groupDynamics, interests = [], accessibility = [] } = preferences;
+  const { hiking = {}, food = {}, activityLevel, travelWith, groupDynamics, interests = [], accessibility = [] } = preferences;
   const parts = [];
+  
+  // Hiking Prefs
   const DIFF_MAP = { Easy: 'Easy', Moderate: 'Moderate', Strenuous: 'Strenuous', Expert: 'Expert' };
-  if (hiking.difficulty?.length) parts.push(`Preferred difficulty: ${hiking.difficulty.map(d => DIFF_MAP[d] || d).join(', ')}`);
+  if (hiking.difficulty) {
+    const diffs = Array.isArray(hiking.difficulty) ? hiking.difficulty : [hiking.difficulty];
+    if (diffs.length > 0 && diffs[0] !== '') parts.push(`Preferred difficulty: ${diffs.map(d => DIFF_MAP[d] || d).join(', ')}`);
+  }
   const FEAT = { Shaded: 'shaded', Sunny: 'sunny', Water: 'water', Summit: 'summit', DogFriendly: 'dog-friendly', Loop: 'loop', Scenic: 'scenic', EasyParking: 'parking', Wildflowers: 'wildflowers', Alpine: 'alpine' };
-  if (hiking.features?.length) parts.push(`Features: ${hiking.features.map(f => FEAT[f] || f).join(', ')}`);
+  if (hiking.features) {
+    const feats = Array.isArray(hiking.features) ? hiking.features : [hiking.features];
+    if (feats.length > 0 && feats[0] !== '') parts.push(`Features: ${feats.map(f => FEAT[f] || f).join(', ')}`);
+  }
   const LENS = { short: 'under 2 miles', medium: '2–5 miles', long: '5–10 miles', verylong: '10+ miles' };
   if (hiking.length) parts.push(`Length: ${LENS[hiking.length] || hiking.length}`);
   const ELEVS = { flat: 'flat', gentle: 'gentle', moderate: 'moderate', steep: 'steep' };
   if (hiking.elevation) parts.push(`Elevation: ${ELEVS[hiking.elevation] || hiking.elevation}`);
+  
+  // Food Prefs
+  if (food.cuisines && food.cuisines.length > 0) parts.push(`Food Cuisines: ${food.cuisines.join(', ')}`);
+  if (food.diet && food.diet.length > 0) parts.push(`Dietary Restrictions: ${food.diet.join(', ')}`);
+  if (food.diningStyle) parts.push(`Dining Style: ${food.diningStyle}`);
+  if (food.atmosphere && food.atmosphere.length > 0) parts.push(`Atmosphere: ${food.atmosphere.join(', ')}`);
+
+  // General Prefs
   if (activityLevel) parts.push(`Fitness: ${activityLevel}`);
   if (travelWith) parts.push(`With: ${travelWith}`);
   if (groupDynamics) parts.push(`Group Dynamics: ${groupDynamics}`);
   if (interests.length) parts.push(`Interests: ${interests.join(', ')}`);
   if (accessibility.length) parts.push(`Accessibility Needs: ${accessibility.join(', ')}`);
+  
   return parts.length ? `User profile:\n${parts.map(p => `- ${p}`).join('\n')}` : '';
 }
 
@@ -131,16 +148,21 @@ Respond ONLY with valid JSON:
 }
 
 async function fastSearchNode(state) {
-  const { lat, lng, preferences, query } = state;
+  const { lat, lng, preferences, query, radius } = state;
   const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   
-  let keyword = 'hiking trail nature';
-  if (query) keyword += ` ${query}`;
-  if (preferences?.hiking?.features?.length) {
-    keyword += ` ${preferences.hiking.features.join(' ')}`;
+  let keyword = query ? query : 'hiking trail nature';
+  
+  // Apply food preferences if no query and user is interested in food
+  if (!query && preferences?.interests?.includes('Food & Drink') && preferences?.food?.cuisines?.length > 0) {
+    keyword = `${preferences.food.cuisines.join(' ')} restaurant`;
+  } else if (!query && preferences?.hiking?.features) {
+    const feats = Array.isArray(preferences.hiking.features) ? preferences.hiking.features : [preferences.hiking.features];
+    if (feats.length > 0 && feats[0] !== '') keyword += ` ${feats.join(' ')}`;
   }
   
-  const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=25000&keyword=${encodeURIComponent(keyword)}&key=${key}`;
+  const radiusMeters = radius ? radius * 1609.34 : 25000;
+  const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=${Math.round(radiusMeters)}&keyword=${encodeURIComponent(keyword)}&key=${key}`;
   
   const res = await fetch(url);
   const data = await res.json();
@@ -174,35 +196,42 @@ async function fastSearchNode(state) {
 }
 
 async function aiSearchNode(state) {
-  const { lat, lng, locationName, preferences, query, groupDescription } = state;
+  const { lat, lng, locationName, preferences, query, groupDescription, radius } = state;
   const weather = await fetchWeather(lat, lng);
   const userContext = buildUserContext(preferences || {});
   const adv = getWeatherAdvisory(weather);
   const loc = locationName || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+  const searchRadius = radius ? `${radius} miles` : '15 miles';
 
-  const systemPrompt = `You are an expert local hiking guide with deep knowledge of trails, terrain, safety, and what makes a hike personally meaningful.
-Suggest exactly 10 real, specific hiking trails or trailheads near the user's location that best match their preferences, personality, current weather, and any natural language request.
-${state.excludeNames?.length ? `CRITICAL: DO NOT include any of these trails in your response: ${state.excludeNames.join(', ')}` : ''}
+  const target = query ? `recommendations matching "${query}"` : 'hiking trails and points of interest';
+
+  const systemPrompt = `You are an expert local travel guide with deep knowledge of trails, food, local communities, and what makes an experience personally meaningful.
+Suggest exactly 10 real, specific ${target} near the user's location (within ${searchRadius}) that best match their preferences, personality, current weather, and any natural language request. 
+CRITICAL: Analyze their profile and explicitly recommend places/activities that like-minded people with the exact same interests enjoy doing.
+CRITICAL: If the user has a preferred difficulty, you MUST ONLY return trails with that EXACT difficulty. Do not suggest easy trails if they asked for strenuous, or vice-versa.
+${state.excludeNames?.length ? `CRITICAL: DO NOT include any of these in your response: ${state.excludeNames.join(', ')}` : ''}
 
 Return ONLY a JSON array of objects with these exact fields:
 - "name": string
 - "lat": number
 - "lng": number
 - "distance": string (e.g. "3.2 miles away")
-- "difficulty": "Easy" | "Moderate" | "Strenuous" | "Expert"
-- "length": string
-- "elevationGain": string
-- "features": string[] (from: Shaded, Sunny, Water, Summit, DogFriendly, Loop, Scenic, EasyParking, Wildflowers, Alpine)
+- "difficulty": "Easy" | "Moderate" | "Strenuous" | "Expert" | null (Use null if not a hike)
+- "length": string | null (Use null if not a hike)
+- "elevationGain": string | null (Use null if not a hike)
+- "features": string[] (e.g. Shaded, Sunny, Water, Summit, DogFriendly, Loop, Scenic, EasyParking, Wildflowers, Alpine, Food, Indoor, Social)
 - "why": string (2-3 sentences explaining WHY this matches them personally)
 - "tip": string
 - "bestTime": string
 - "parkingNote": string
 - "weatherNote": string | null (weather-specific advice based on conditions)
-- "sparkline": number[] (array of exactly 6 integers representing elevation profile shape, e.g. [0, 200, 500, 800, 500, 0])
+- "sparkline": number[] (array of exactly 6 integers representing elevation profile shape, or [0,0,0,0,0,0] if not a hike)
+- "rating": number (e.g. 4.8)
+- "estimatedWeeklyVisitors": number (realistic estimate of weekly visitors, e.g. 1500)
 
 Respond ONLY with valid JSON.`;
 
-  const userMessage = `Find 10 hiking trails near ${loc}.
+  const userMessage = `Find 10 ${target} near ${loc} (within ${searchRadius}).
 ${userContext ? `\n${userContext}` : ''}
 ${query ? `\nWhat I want: "${query}"` : ''}
 ${groupDescription ? `\nGroup details: ${groupDescription}` : ''}
@@ -243,6 +272,7 @@ const graphState = {
   groupDescription: { value: (prev, next) => next ?? prev },
   forceMode: { value: (prev, next) => next ?? prev },
   excludeNames: { value: (prev, next) => next ?? prev },
+  radius: { value: (prev, next) => next ?? prev },
   
   // Output fields
   next: { value: (prev, next) => next ?? prev },
@@ -281,6 +311,7 @@ export async function POST(request) {
       groupDescription: body.groupDescription,
       forceMode: body.forceMode, // null | 'ai' | 'fast'
       excludeNames: body.excludeNames || [],
+      radius: body.radius || 25,
     });
 
     return NextResponse.json({

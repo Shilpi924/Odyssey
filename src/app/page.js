@@ -30,16 +30,16 @@ export default function Home() {
             href="/search?q=hikes"
           />
           <ActionCard 
-            title="Like-minded people"
-            icon="🤝"
-            description="Join activities with people who share your interests."
-            href="/search?q=community"
-          />
-          <ActionCard 
             title="Food I like"
             icon="🍔"
             description="Discover restaurants based on your taste."
             href="/search?q=food"
+          />
+          <ActionCard 
+            title="Suggested for you"
+            icon="✨"
+            description="Discover what like-minded people with your interests are doing."
+            href="/search?q=popular activities for people like me"
           />
           <ActionCard 
             title="Kid-friendly"
@@ -51,7 +51,7 @@ export default function Home() {
 
         <div className="text-center bg-white/5 backdrop-blur-lg p-8 rounded-3xl border border-white/10 w-full max-w-2xl">
           <h2 className="text-2xl font-bold text-white mb-4">Want better recommendations?</h2>
-          <p className="text-indigo-200 mb-6">Tell us a bit more about what you love, and we'll personalize everything for you.</p>
+          <p className="text-indigo-200 mb-6">Tell us a bit more about what you love, and we&apos;ll personalize everything for you.</p>
           <Link href="/personalize">
             <button className="px-8 py-4 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white font-bold rounded-full shadow-lg hover:shadow-indigo-500/30 transition-all duration-300 transform hover:-translate-y-1">
               Personalize My Preferences ✨
