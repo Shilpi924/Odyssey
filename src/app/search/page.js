@@ -3,10 +3,11 @@
 import { useState, useEffect, useRef, Suspense, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import Map, { Marker } from 'react-map-gl/maplibre';
+import Map, { Marker, Source, Layer } from 'react-map-gl/maplibre';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { db } from '@/lib/db';
+import { downloadAreaTiles } from '@/lib/offline-maps';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -24,6 +25,14 @@ const DIFF = {
   Expert:    { bg: 'bg-rose-500',    text: 'text-rose-300',    badge: 'bg-rose-400/10 text-rose-300 border border-rose-400/30',       pin: '#ef4444' },
 };
 const getDiff = (d) => DIFF[d] || DIFF.Moderate;
+
+function distanceMiles(lat1, lon1, lat2, lon2) {
+  const R = 3958.8; // miles
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 const PIN_COLORS = [
   { bg: 'bg-rose-500', cardBg: 'bg-rose-900/40', text: 'text-rose-300', badge: 'bg-rose-400/10 text-rose-300 border border-rose-400/30', border: 'border-rose-400', shadow: 'shadow-rose-900/30', ring: 'ring-rose-500/40' },
@@ -379,11 +388,11 @@ function MapPopup({ trail, index, onClose, onScrollToCard }) {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              window.open(`https://www.google.com/maps/dir/?api=1&destination=${trail.lat},${trail.lng}`, '_blank', 'noopener,noreferrer');
+              onStartHike(trail);
             }}
             className="flex-1 text-xs py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors font-medium"
           >
-            🧭 Navigate (Start/End)
+            🚶 Start Hike
           </button>
         </div>
       </div>
@@ -426,7 +435,7 @@ function Sparkline({ data }) {
 
 // ─── AI Trail Card ─────────────────────────────────────────────────────────────
 
-function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetView, onAskAI, onSave, isSaved, onCompareToggle, isComparing }) {
+function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetView, onAskAI, onSave, isSaved, onCompareToggle, isComparing, onStartHike }) {
   const d = getPinColor(index);
   const diffBadge = getDiff(trail.difficulty);
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
@@ -571,11 +580,11 @@ function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetView
           <button
             onClick={(e) => {
               e.stopPropagation();
-              window.open(`https://www.google.com/maps/dir/?api=1&destination=${trail.lat},${trail.lng}`, '_blank', 'noopener,noreferrer');
+              onStartHike(trail);
             }}
             className="flex-1 text-xs py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl transition-colors font-medium"
           >
-            🧭 Navigate (Start/End)
+            🚶 Start Hike
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onAskAI(trail); }}
@@ -601,7 +610,7 @@ function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetView
 
 // ─── Fast Trail Card (Google Places) ──────────────────────────────────────────
 
-function FastTrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetView, onSave, isSaved }) {
+function FastTrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetView, onSave, isSaved, onStartHike }) {
   const d = getPinColor(index);
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const [imgLoaded, setImgLoaded] = useState(false);
@@ -682,11 +691,11 @@ function FastTrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetVi
           <button
             onClick={(e) => {
               e.stopPropagation();
-              window.open(`https://www.google.com/maps/dir/?api=1&destination=${trail.lat},${trail.lng}`, '_blank', 'noopener,noreferrer');
+              onStartHike(trail);
             }}
             className="flex-1 text-xs py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl transition-colors font-medium"
           >
-            🧭 Navigate (Start/End)
+            🚶 Start Hike
           </button>
         </div>
             </motion.div>
@@ -785,11 +794,61 @@ function HikeSearchContent() {
   const [isOffline, setIsOffline] = useState(false);
   const [savedIds, setSavedIds] = useState(new Set());
 
+  const handleSaveHike = async (trail) => {
+    try {
+      const id = `${trail.name}-${trail.lat}`;
+      if (savedIds.has(id)) {
+        await db.savedHikes.where('id').equals(id).delete();
+        setSavedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
+      } else {
+        // 1. Fetch map image to blob via our proxy to bypass CORS
+        let blob = null;
+        try {
+          const url = trail.photoRef 
+            ? `/api/proxy-image?photoRef=${trail.photoRef}`
+            : `/api/proxy-image?lat=${trail.lat}&lng=${trail.lng}`;
+          const res = await fetch(url);
+          if (res.ok) blob = await res.blob();
+        } catch (e) {
+          console.warn('Failed to fetch image proxy', e);
+        }
+
+        await db.savedHikes.put({
+          id,
+          ...trail,
+          mapImageBlob: blob,
+          savedAt: Date.now()
+        });
+        setSavedIds(prev => new Set(prev).add(id));
+        // Trigger background download of map tiles for this area
+        if (trail.lat && trail.lng) {
+          downloadAreaTiles(trail.lat, trail.lng).catch(console.error);
+        }
+      }
+    } catch (err) {
+      console.error('Error saving hike:', err);
+    }
+  };
+
   const cardRefs = useRef([]);
   const mapRef = useRef(null);
 
-  // ── Network status listener
+  // ── Hike Tracking state
+  const [isHiking, setIsHiking] = useState(false);
+  const [activeHike, setActiveHike] = useState(null);
+  const [hikeDistance, setHikeDistance] = useState(0);
+  const [hikeDuration, setHikeDuration] = useState(0);
+  const [hikeElevationGain, setHikeElevationGain] = useState(0);
+  const [hikeSpeed, setHikeSpeed] = useState(0);
+  const watchIdRef = useRef(null);
+  const timerRef = useRef(null);
+  const lastLocRef = useRef(null);
+
+  // ── Network status listener & Service Worker
   useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(console.error);
+    }
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsOffline(!navigator.onLine);
     const handleOffline = () => setIsOffline(true);
@@ -821,34 +880,6 @@ function HikeSearchContent() {
     );
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
-
-  // ── Save Hike Logic
-  const handleSaveHike = async (trail) => {
-    const id = `${trail.name}-${trail.lat}`;
-    if (savedIds.has(id)) return;
-    try {
-      // 1. Fetch map image to blob via our proxy to bypass CORS
-      const url = trail.photoRef 
-        ? `/api/proxy-image?photoRef=${trail.photoRef}`
-        : `/api/proxy-image?lat=${trail.lat}&lng=${trail.lng}`;
-      
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('Failed to fetch image proxy');
-      const blob = await res.blob();
-
-      // 2. Save to Dexie
-      await db.savedHikes.put({
-        ...trail,
-        mapImageBlob: blob,
-        savedAt: new Date().toISOString()
-      });
-
-      setSavedIds(prev => new Set(prev).add(id));
-    } catch (e) {
-      console.error('Failed to save offline', e);
-      alert('Failed to save for offline usage. Check connection.');
-    }
-  };
 
   // ── Load preferences
   useEffect(() => {
@@ -1024,6 +1055,66 @@ function HikeSearchContent() {
       setMapCenter({ lat: trails[next].lat, lng: trails[next].lng });
       setMapZoom(14);
       mapRef.current?.flyTo({ center: [trails[next].lng, trails[next].lat], zoom: 14 });
+    }
+  };
+
+  const startHike = (trail) => {
+    setIsHiking(true);
+    setActiveHike(trail);
+    setHikeDistance(0);
+    setHikeDuration(0);
+    setHikeElevationGain(0);
+    setHikeSpeed(0);
+    lastLocRef.current = null;
+
+    timerRef.current = setInterval(() => {
+      setHikeDuration(prev => prev + 1);
+    }, 1000);
+
+    if ('geolocation' in navigator) {
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        (pos) => {
+          const { latitude, longitude, altitude, speed } = pos.coords;
+          setUserLocation({ lat: latitude, lng: longitude });
+          setMapCenter({ lat: latitude, lng: longitude });
+          mapRef.current?.flyTo({ center: [longitude, latitude], zoom: 16 });
+
+          if (lastLocRef.current) {
+            const dist = distanceMiles(lastLocRef.current.lat, lastLocRef.current.lng, latitude, longitude);
+            setHikeDistance(prev => prev + dist);
+            
+            if (altitude && lastLocRef.current.altitude) {
+              const diff = altitude - lastLocRef.current.altitude;
+              if (diff > 0) {
+                // Convert meters to feet
+                setHikeElevationGain(prev => prev + (diff * 3.28084));
+              }
+            }
+          }
+          
+          if (speed !== null) {
+            // Convert m/s to mph
+            setHikeSpeed(speed * 2.23694);
+          }
+
+          lastLocRef.current = { lat: latitude, lng: longitude, altitude };
+        },
+        (err) => console.error(err),
+        { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
+      );
+    }
+  };
+
+  const stopHike = () => {
+    setIsHiking(false);
+    setActiveHike(null);
+    if (watchIdRef.current) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
     }
   };
 
@@ -1209,7 +1300,27 @@ function HikeSearchContent() {
 
               {trails.map((trail, i) =>
                 trail.lat && trail.lng ? (
-                  <TrailPin key={i} trail={trail} index={i} isSelected={selectedIdx === i} onClick={() => selectTrail(i)} />
+                  <TrailPin key={`pin-${i}`} trail={trail} index={i} isSelected={selectedIdx === i} onClick={() => selectTrail(i)} />
+                ) : null
+              )}
+
+              {trails.map((trail, i) =>
+                trail.route ? (
+                  <Source key={`source-${i}`} id={`route-source-${i}`} type="geojson" data={trail.route}>
+                    <Layer
+                      id={`route-layer-${i}`}
+                      type="line"
+                      layout={{
+                        'line-join': 'round',
+                        'line-cap': 'round'
+                      }}
+                      paint={{
+                        'line-color': selectedIdx === i ? '#3b82f6' : '#94a3b8',
+                        'line-width': selectedIdx === i ? 4 : 2,
+                        'line-dasharray': selectedIdx === i ? [1] : [2, 2]
+                      }}
+                    />
+                  </Source>
                 ) : null
               )}
 
@@ -1234,6 +1345,40 @@ function HikeSearchContent() {
                   )}
               </div>
             </Map>
+
+          {/* Active Hike Overlay */}
+          {isHiking && activeHike && (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-md text-white px-6 py-4 rounded-2xl border border-emerald-500 shadow-2xl flex flex-col items-center gap-3 z-50 min-w-[300px]">
+              <div className="text-emerald-400 font-bold uppercase tracking-wider text-xs">Active Hike</div>
+              <div className="font-semibold text-lg text-center leading-tight">{activeHike.name}</div>
+              <div className="flex gap-4 text-sm text-slate-300 w-full justify-between px-2">
+                <div className="flex flex-col items-center">
+                  <span className="text-xl">{hikeDistance.toFixed(2)}</span>
+                  <span className="text-[10px] text-slate-400 uppercase tracking-wide">Miles</span>
+                </div>
+                <div className="w-px bg-slate-700"></div>
+                <div className="flex flex-col items-center">
+                  <span className="text-xl">
+                    {Math.floor(hikeDuration / 60)}:{(hikeDuration % 60).toString().padStart(2, '0')}
+                  </span>
+                  <span className="text-[10px] text-slate-400 uppercase tracking-wide">Time</span>
+                </div>
+                <div className="w-px bg-slate-700"></div>
+                <div className="flex flex-col items-center">
+                  <span className="text-xl">{Math.round(hikeElevationGain)}</span>
+                  <span className="text-[10px] text-slate-400 uppercase tracking-wide">Feet</span>
+                </div>
+                <div className="w-px bg-slate-700"></div>
+                <div className="flex flex-col items-center">
+                  <span className="text-xl">{hikeSpeed.toFixed(1)}</span>
+                  <span className="text-[10px] text-slate-400 uppercase tracking-wide">MPH</span>
+                </div>
+              </div>
+              <button onClick={stopHike} className="mt-1 w-full bg-rose-600 hover:bg-rose-500 text-white text-sm font-bold py-2 rounded-xl transition-colors">
+                Stop Hike
+              </button>
+            </div>
+          )}
 
           {/* Count pill */}
           {hasTrails && (
@@ -1349,6 +1494,7 @@ function HikeSearchContent() {
                     isSaved={savedIds.has(`${trail.name}-${trail.lat}`)}
                     onCompareToggle={toggleCompare}
                     isComparing={compareList.some(ct => ct.name === trail.name)}
+                    onStartHike={startHike}
                   />
                 ) : (
                   <FastTrailCard
@@ -1360,6 +1506,7 @@ function HikeSearchContent() {
                     cardRef={(el) => (cardRefs.current[i] = el)}
                     onSave={handleSaveHike}
                     isSaved={savedIds.has(`${trail.name}-${trail.lat}`)}
+                    onStartHike={startHike}
                   />
                 )
               )}

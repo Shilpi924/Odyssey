@@ -14,6 +14,26 @@ function distanceMiles(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+function generateMockRoute(centerLat, centerLng) {
+  const points = [];
+  const radius = 0.01; // roughly 1km
+  for (let i = 0; i <= 20; i++) {
+    const angle = (i / 20) * Math.PI * 2;
+    // adding some noise for realistic looking path
+    const r = radius * (0.8 + Math.random() * 0.4); 
+    const lat = centerLat + r * Math.sin(angle);
+    const lng = centerLng + r * Math.cos(angle);
+    points.push([lng, lat]); // GeoJSON is [lng, lat]
+  }
+  return {
+    type: "Feature",
+    geometry: {
+      type: "LineString",
+      coordinates: points
+    }
+  };
+}
+
 const WEATHER_LABELS = {
   0: 'Clear sky', 1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast',
   45: 'Foggy', 48: 'Icy fog',
@@ -185,6 +205,7 @@ async function fastSearchNode(state) {
         placeId: place.place_id,
         photoRef: place.photos?.[0]?.photo_reference || null,
         source: 'google_places',
+        route: generateMockRoute(pLat, pLng),
         difficulty: null, length: null, elevationGain: null, features: [], why: null, tip: null, bestTime: null, parkingNote: null, weatherNote: null, sparkline: [0,0,0,0,0,0],
       };
     });
@@ -252,7 +273,7 @@ Weather advisory: ${adv}`;
     trails = JSON.parse(raw); 
     trails = trails.map(t => {
       const dist = distanceMiles(lat, lng, t.lat, t.lng);
-      return { ...t, distanceNum: dist, distance: `${dist.toFixed(1)} miles away` };
+      return { ...t, distanceNum: dist, distance: `${dist.toFixed(1)} miles away`, route: generateMockRoute(t.lat, t.lng) };
     });
     trails.sort((a, b) => a.distanceNum - b.distanceNum);
   } catch { /* ignore parse error for now */ }
