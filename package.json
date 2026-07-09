@@ -17,12 +17,13 @@
     "@langchain/langgraph": "^1.4.7",
     "@serwist/core": "^9.5.11",
     "@serwist/next": "^9.5.11",
-    "@vis.gl/react-google-maps": "^1.9.0",
     "dexie": "^4.4.4",
     "framer-motion": "^12.42.2",
+    "maplibre-gl": "^5.24.0",
     "next": "16.2.10",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "react-map-gl": "^8.1.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",

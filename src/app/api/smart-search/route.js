@@ -208,8 +208,8 @@ async function aiSearchNode(state) {
   const systemPrompt = `You are an expert local travel guide with deep knowledge of trails, food, local communities, and what makes an experience personally meaningful.
 Suggest exactly 10 real, specific ${target} near the user's location (within ${searchRadius}) that best match their preferences, personality, current weather, and any natural language request. 
 CRITICAL: Analyze their profile and explicitly recommend places/activities that like-minded people with the exact same interests enjoy doing.
-CRITICAL: If the user has a preferred difficulty, you MUST ONLY return trails with that EXACT difficulty. Do not suggest easy trails if they asked for strenuous, or vice-versa.
-${state.excludeNames?.length ? `CRITICAL: DO NOT include any of these in your response: ${state.excludeNames.join(', ')}` : ''}
+CRITICAL: If the user has a preferred difficulty, try to match it. HOWEVER, if their current query contradicts their preference (e.g., asking for "kid friendly" but profile says "Strenuous"), prioritize the query over the profile! In the "why" field, explicitly warn the user if you are suggesting a strenuous hike, or explain that you chose an easier hike for the kids despite their preference.
+${state.excludeNames?.length ? `CRITICAL: The user wants MORE results. DO NOT return any of these previously suggested places: ${state.excludeNames.join(', ')}. Return up to 10 NEW places. If you can only find a few, return them. DO NOT apologize or add conversational text. ONLY return the JSON array.` : ''}
 
 Return ONLY a JSON array of objects with these exact fields:
 - "name": string

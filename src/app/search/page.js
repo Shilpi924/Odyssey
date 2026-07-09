@@ -3,7 +3,9 @@
 import { useState, useEffect, useRef, Suspense, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { APIProvider, Map, AdvancedMarker, MapControl, ControlPosition } from '@vis.gl/react-google-maps';
+import Map, { Marker } from 'react-map-gl/maplibre';
+import maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import { db } from '@/lib/db';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -24,16 +26,16 @@ const DIFF = {
 const getDiff = (d) => DIFF[d] || DIFF.Moderate;
 
 const PIN_COLORS = [
-  { bg: 'bg-rose-500', text: 'text-rose-300', badge: 'bg-rose-400/10 text-rose-300 border border-rose-400/30', border: 'border-rose-400', shadow: 'shadow-rose-900/30', ring: 'ring-rose-500/40' },
-  { bg: 'bg-orange-500', text: 'text-orange-300', badge: 'bg-orange-400/10 text-orange-300 border border-orange-400/30', border: 'border-orange-400', shadow: 'shadow-orange-900/30', ring: 'ring-orange-500/40' },
-  { bg: 'bg-amber-500', text: 'text-amber-300', badge: 'bg-amber-400/10 text-amber-300 border border-amber-400/30', border: 'border-amber-400', shadow: 'shadow-amber-900/30', ring: 'ring-amber-500/40' },
-  { bg: 'bg-emerald-500', text: 'text-emerald-300', badge: 'bg-emerald-400/10 text-emerald-300 border border-emerald-400/30', border: 'border-emerald-400', shadow: 'shadow-emerald-900/30', ring: 'ring-emerald-500/40' },
-  { bg: 'bg-cyan-500', text: 'text-cyan-300', badge: 'bg-cyan-400/10 text-cyan-300 border border-cyan-400/30', border: 'border-cyan-400', shadow: 'shadow-cyan-900/30', ring: 'ring-cyan-500/40' },
-  { bg: 'bg-blue-500', text: 'text-blue-300', badge: 'bg-blue-400/10 text-blue-300 border border-blue-400/30', border: 'border-blue-400', shadow: 'shadow-blue-900/30', ring: 'ring-blue-500/40' },
-  { bg: 'bg-indigo-500', text: 'text-indigo-300', badge: 'bg-indigo-400/10 text-indigo-300 border border-indigo-400/30', border: 'border-indigo-400', shadow: 'shadow-indigo-900/30', ring: 'ring-indigo-500/40' },
-  { bg: 'bg-violet-500', text: 'text-violet-300', badge: 'bg-violet-400/10 text-violet-300 border border-violet-400/30', border: 'border-violet-400', shadow: 'shadow-violet-900/30', ring: 'ring-violet-500/40' },
-  { bg: 'bg-fuchsia-500', text: 'text-fuchsia-300', badge: 'bg-fuchsia-400/10 text-fuchsia-300 border border-fuchsia-400/30', border: 'border-fuchsia-400', shadow: 'shadow-fuchsia-900/30', ring: 'ring-fuchsia-500/40' },
-  { bg: 'bg-pink-500', text: 'text-pink-300', badge: 'bg-pink-400/10 text-pink-300 border border-pink-400/30', border: 'border-pink-400', shadow: 'shadow-pink-900/30', ring: 'ring-pink-500/40' },
+  { bg: 'bg-rose-500', cardBg: 'bg-rose-900/40', text: 'text-rose-300', badge: 'bg-rose-400/10 text-rose-300 border border-rose-400/30', border: 'border-rose-400', shadow: 'shadow-rose-900/30', ring: 'ring-rose-500/40' },
+  { bg: 'bg-orange-500', cardBg: 'bg-orange-900/40', text: 'text-orange-300', badge: 'bg-orange-400/10 text-orange-300 border border-orange-400/30', border: 'border-orange-400', shadow: 'shadow-orange-900/30', ring: 'ring-orange-500/40' },
+  { bg: 'bg-amber-500', cardBg: 'bg-amber-900/40', text: 'text-amber-300', badge: 'bg-amber-400/10 text-amber-300 border border-amber-400/30', border: 'border-amber-400', shadow: 'shadow-amber-900/30', ring: 'ring-amber-500/40' },
+  { bg: 'bg-emerald-500', cardBg: 'bg-emerald-900/40', text: 'text-emerald-300', badge: 'bg-emerald-400/10 text-emerald-300 border border-emerald-400/30', border: 'border-emerald-400', shadow: 'shadow-emerald-900/30', ring: 'ring-emerald-500/40' },
+  { bg: 'bg-cyan-500', cardBg: 'bg-cyan-900/40', text: 'text-cyan-300', badge: 'bg-cyan-400/10 text-cyan-300 border border-cyan-400/30', border: 'border-cyan-400', shadow: 'shadow-cyan-900/30', ring: 'ring-cyan-500/40' },
+  { bg: 'bg-blue-500', cardBg: 'bg-blue-900/40', text: 'text-blue-300', badge: 'bg-blue-400/10 text-blue-300 border border-blue-400/30', border: 'border-blue-400', shadow: 'shadow-blue-900/30', ring: 'ring-blue-500/40' },
+  { bg: 'bg-indigo-500', cardBg: 'bg-indigo-900/40', text: 'text-indigo-300', badge: 'bg-indigo-400/10 text-indigo-300 border border-indigo-400/30', border: 'border-indigo-400', shadow: 'shadow-indigo-900/30', ring: 'ring-indigo-500/40' },
+  { bg: 'bg-violet-500', cardBg: 'bg-violet-900/40', text: 'text-violet-300', badge: 'bg-violet-400/10 text-violet-300 border border-violet-400/30', border: 'border-violet-400', shadow: 'shadow-violet-900/30', ring: 'ring-violet-500/40' },
+  { bg: 'bg-fuchsia-500', cardBg: 'bg-fuchsia-900/40', text: 'text-fuchsia-300', badge: 'bg-fuchsia-400/10 text-fuchsia-300 border border-fuchsia-400/30', border: 'border-fuchsia-400', shadow: 'shadow-fuchsia-900/30', ring: 'ring-fuchsia-500/40' },
+  { bg: 'bg-pink-500', cardBg: 'bg-pink-900/40', text: 'text-pink-300', badge: 'bg-pink-400/10 text-pink-300 border border-pink-400/30', border: 'border-pink-400', shadow: 'shadow-pink-900/30', ring: 'ring-pink-500/40' },
 ];
 const getPinColor = (index) => PIN_COLORS[index % PIN_COLORS.length];
 
@@ -73,102 +75,28 @@ function staticMapUrl(lat, lng, apiKey) {
   );
 }
 
-// ─── Embedded Street View (full-screen overlay) ────────────────────────────────
+// ─── OSM Map Style ─────────────────────────────────────────────────────────────
 
-function StreetViewOverlay({ position, label, onClose }) {
-  const svRef = useRef(null);
-  const [svStatus, setSvStatus] = useState('loading'); // loading | ok | unavailable
-
-  useEffect(() => {
-    if (!svRef.current || !position) return;
-
-    const init = () => {
-      if (!window.google?.maps?.StreetViewService) {
-        setSvStatus('unavailable');
-        return;
-      }
-      const svService = new window.google.maps.StreetViewService();
-      const panorama = new window.google.maps.StreetViewPanorama(svRef.current, {
-        pov: { heading: 90, pitch: 0 },
-        zoom: 1,
-        addressControl: false,
-        showRoadLabels: true,
-        motionTracking: false,
-        motionTrackingControl: false,
-        fullscreenControl: false,
-        panControl: true,
-        zoomControl: true,
-        linksControl: true,
-      });
-
-      svService.getPanorama(
-        { location: { lat: position.lat, lng: position.lng }, radius: 500 },
-        (data, status) => {
-          if (status === 'OK') {
-            panorama.setPano(data.location.pano);
-            setSvStatus('ok');
-          } else {
-            setSvStatus('unavailable');
-          }
-        }
-      );
-    };
-
-    // Small delay ensures window.google.maps is fully initialised
-    const t = setTimeout(init, 150);
-    return () => clearTimeout(t);
-  }, [position]);
-
-  return (
-    <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col">
-      {/* Header */}
-      <div className="shrink-0 flex items-center gap-3 px-4 py-3 bg-slate-900/95 border-b border-slate-700">
-        <button
-          onClick={onClose}
-          className="flex items-center gap-1.5 text-slate-300 hover:text-white text-sm font-medium transition-colors"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          Back
-        </button>
-        <div className="flex-1 min-w-0">
-          <p className="text-white text-sm font-semibold truncate">{label}</p>
-          <p className="text-slate-400 text-xs">Street View — drag to explore 360°</p>
-        </div>
-      </div>
-
-      {/* Panorama container */}
-      <div className="flex-1 relative">
-        {svStatus === 'loading' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-900 z-10">
-            <div className="w-10 h-10 rounded-full border-4 border-indigo-500 border-t-transparent animate-spin" />
-            <p className="text-slate-400 text-sm">Loading Street View…</p>
-          </div>
-        )}
-        {svStatus === 'unavailable' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-slate-900 z-10">
-            <span className="text-6xl">🌲</span>
-            <div className="text-center">
-              <p className="text-white font-semibold mb-1">No Street View here</p>
-              <p className="text-slate-400 text-sm max-w-xs">
-                Google hasn&apos;t captured this trailhead yet. Try a nearby trailhead.
-              </p>
-            </div>
-            <button
-              onClick={onClose}
-              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium transition-colors"
-            >
-              Back to map
-            </button>
-          </div>
-        )}
-        {/* Panorama renders here — hidden until ready to avoid flash */}
-        <div ref={svRef} className={`absolute inset-0 w-full h-full ${svStatus !== 'ok' ? 'opacity-0' : 'opacity-100'} transition-opacity duration-500`} />
-      </div>
-    </div>
-  );
-}
+const OSM_STYLE = {
+  version: 8,
+  sources: {
+    osm: {
+      type: 'raster',
+      tiles: ['https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'],
+      tileSize: 256,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+    }
+  },
+  layers: [
+    {
+      id: 'osm',
+      type: 'raster',
+      source: 'osm',
+      minzoom: 0,
+      maxzoom: 19
+    }
+  ]
+};
 
 // ─── Trail Chat Drawer ─────────────────────────────────────────────────────────
 
@@ -224,6 +152,7 @@ function TrailChatDrawer({ trail, open, onClose }) {
       setHistory([]);
       setInput('');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, trail?.name]);
 
   // ── Scroll to bottom of chat
@@ -392,7 +321,7 @@ function EnvironmentalBanner({ weather }) {
 function TrailPin({ trail, index, isSelected, onClick }) {
   const d = getPinColor(index);
   return (
-    <AdvancedMarker position={{ lat: trail.lat, lng: trail.lng }} onClick={onClick} zIndex={isSelected ? 100 : 10}>
+    <Marker longitude={trail.lng} latitude={trail.lat} onClick={(e) => { e.originalEvent.stopPropagation(); onClick(); }} style={{ zIndex: isSelected ? 100 : 10 }}>
       <div
         className="flex flex-col items-center cursor-pointer"
         style={{ transform: isSelected ? 'scale(1.3)' : 'scale(1)', transition: 'transform 0.2s' }}
@@ -402,13 +331,13 @@ function TrailPin({ trail, index, isSelected, onClick }) {
         </div>
         <div className={`w-0.5 h-2 ${d.bg}`} />
       </div>
-    </AdvancedMarker>
+    </Marker>
   );
 }
 
 function UserPin({ position }) {
   return (
-    <AdvancedMarker position={position} zIndex={200}>
+    <Marker longitude={position.lng} latitude={position.lat} style={{ zIndex: 200 }}>
       <div className="flex flex-col items-center gap-1">
         <div className="bg-blue-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-lg border border-blue-400 whitespace-nowrap">
           📍 You are here
@@ -419,7 +348,7 @@ function UserPin({ position }) {
           <div className="w-5 h-5 bg-blue-500 border-2 border-white rounded-full shadow-lg" />
         </div>
       </div>
-    </AdvancedMarker>
+    </Marker>
   );
 }
 
@@ -427,7 +356,7 @@ function MapPopup({ trail, index, onClose, onScrollToCard }) {
   const d = getPinColor(index);
   const diffBadge = getDiff(trail.difficulty);
   return (
-    <AdvancedMarker position={{ lat: trail.lat, lng: trail.lng }} zIndex={300}>
+    <Marker longitude={trail.lng} latitude={trail.lat} style={{ zIndex: 300 }}>
       <div className="mb-14 w-64 bg-slate-900 border border-slate-600 rounded-2xl shadow-2xl p-4 relative">
         <button
           onClick={(e) => { e.stopPropagation(); onClose(); }}
@@ -448,12 +377,6 @@ function MapPopup({ trail, index, onClose, onScrollToCard }) {
         )}
         <div className="flex gap-2">
           <button
-            onClick={(e) => { e.stopPropagation(); onScrollToCard(); }}
-            className="flex-1 text-xs py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors font-medium"
-          >
-            See Details
-          </button>
-          <button
             onClick={(e) => {
               e.stopPropagation();
               window.open(`https://www.google.com/maps/dir/?api=1&destination=${trail.lat},${trail.lng}`, '_blank', 'noopener,noreferrer');
@@ -464,7 +387,7 @@ function MapPopup({ trail, index, onClose, onScrollToCard }) {
           </button>
         </div>
       </div>
-    </AdvancedMarker>
+    </Marker>
   );
 }
 
@@ -532,7 +455,7 @@ function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetView
         <span className="text-emerald-400 font-bold text-lg">💾 Release to Save</span>
       </div>
 
-      <div className="bg-slate-800/90 w-full h-full relative">
+      <div className={`${d.cardBg} w-full h-full relative`}>
       {/* Satellite thumbnail */}
       {trail.lat && trail.lng && (
         <div className="relative h-36 w-full overflow-hidden bg-slate-700">
@@ -547,17 +470,16 @@ function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetView
               <div className="w-6 h-6 rounded-full border-2 border-slate-500 border-t-transparent animate-spin" />
             </div>
           )}
-          {/* Street View overlay button */}
-          <button
-            onClick={(e) => { e.stopPropagation(); onStreetView(trail); }}
-            className="absolute bottom-2 right-2 flex items-center gap-1 bg-slate-900/80 backdrop-blur text-white text-xs px-2.5 py-1.5 rounded-lg border border-slate-600/60 hover:bg-slate-800 transition-colors"
-          >
-            🚶 Street View
-          </button>
           {/* Index badge */}
           <div className={`absolute top-2 left-2 ${d.bg} text-white text-xs font-bold px-2 py-1 rounded-lg shadow`}>
             {index + 1}
           </div>
+          {/* Difficulty badge */}
+          {trail.difficulty && (
+            <div className={`absolute top-2 right-2 text-xs font-bold px-2.5 py-1 rounded-lg shadow backdrop-blur-md ${diffBadge.badge}`}>
+              {trail.difficulty}
+            </div>
+          )}
         </div>
       )}
 
@@ -571,14 +493,21 @@ function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetView
               {trail.rating && (
                 <span className="flex items-center gap-0.5">
                   <span className="text-amber-400">★</span> {trail.rating}
-                  {trail.userRatingsTotal > 0 && ` (${trail.userRatingsTotal.toLocaleString()})`}
+                  {trail.userRatingsTotal > 0 && ` (${trail.userRatingsTotal.toLocaleString()} on Google Maps)`}
                 </span>
               )}
             </div>
           </div>
-          <span className={`shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full ${diffBadge.badge}`}>{trail.difficulty}</span>
         </div>
 
+        <AnimatePresence>
+          {isSelected && (
+            <motion.div
+              initial={{ height: 0, opacity: 0, marginTop: 0 }}
+              animate={{ height: 'auto', opacity: 1, marginTop: 12 }}
+              exit={{ height: 0, opacity: 0, marginTop: 0 }}
+              className="flex flex-col gap-3 overflow-hidden"
+            >
         {/* Stats */}
         <div className="flex gap-4 text-sm text-slate-300 items-end">
           {trail.length && <span>🥾 {trail.length}</span>}
@@ -661,6 +590,9 @@ function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetView
             ⚖️
           </button>
         </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
       </div>
     </motion.div>
@@ -681,7 +613,7 @@ function FastTrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetVi
     <div
       ref={cardRef}
       onClick={onSelect}
-      className={`bg-slate-800/70 backdrop-blur border rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 ${
+      className={`${d.cardBg} backdrop-blur border rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 ${
         isSelected ? `${d.border} shadow-xl ${d.shadow} ring-1 ${d.ring}` : 'border-slate-700 hover:border-slate-500'
       }`}
     >
@@ -701,15 +633,14 @@ function FastTrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetVi
               <div className="w-6 h-6 rounded-full border-2 border-slate-500 border-t-transparent animate-spin" />
             </div>
           )}
-          <button
-            onClick={(e) => { e.stopPropagation(); onStreetView(trail); }}
-            className="absolute bottom-2 right-2 flex items-center gap-1 bg-slate-900/80 backdrop-blur text-white text-xs px-2.5 py-1.5 rounded-lg border border-slate-600/60 hover:bg-slate-800 transition-colors"
-          >
-            🚶 Street View
-          </button>
           <div className={`absolute top-2 left-2 ${d.bg} text-white text-xs font-bold px-2 py-1 rounded-lg shadow`}>
             {index + 1}
           </div>
+          {trail.difficulty && (
+            <div className={`absolute top-2 right-2 text-xs font-bold px-2.5 py-1 rounded-lg shadow backdrop-blur-md ${getDiff(trail.difficulty).badge}`}>
+              {trail.difficulty}
+            </div>
+          )}
         </div>
       )}
 
@@ -719,16 +650,21 @@ function FastTrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetVi
             <h3 className="text-white font-bold text-base leading-tight">{trail.name}</h3>
             <p className="text-slate-500 text-xs mt-0.5 truncate">{trail.vicinity}</p>
           </div>
-          {trail.difficulty && (
-            <span className={`shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full ${getDiff(trail.difficulty).badge}`}>{trail.difficulty}</span>
-          )}
         </div>
+        <AnimatePresence>
+          {isSelected && (
+            <motion.div
+              initial={{ height: 0, opacity: 0, marginTop: 0 }}
+              animate={{ height: 'auto', opacity: 1, marginTop: 8 }}
+              exit={{ height: 0, opacity: 0, marginTop: 0 }}
+              className="flex flex-col gap-2 overflow-hidden"
+            >
         <div className="flex items-center gap-2 text-xs text-slate-400">
           <span>📍 {trail.distance}</span>
           {trail.rating && (
             <span className="flex items-center gap-0.5">
               <span className="text-amber-400">★</span> {trail.rating}
-              {trail.userRatingsTotal > 0 && ` (${trail.userRatingsTotal.toLocaleString()})`}
+              {trail.userRatingsTotal > 0 && ` (${trail.userRatingsTotal.toLocaleString()} on Google Maps)`}
             </span>
           )}
           {trail.estimatedWeeklyVisitors && <span className="opacity-70">👥 ~{trail.estimatedWeeklyVisitors.toLocaleString()}/wk</span>}
@@ -753,6 +689,9 @@ function FastTrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetVi
             🧭 Navigate (Start/End)
           </button>
         </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
@@ -816,9 +755,6 @@ function HikeSearchContent() {
   const [chatTrail, setChatTrail] = useState(null);
   const [chatOpen, setChatOpen] = useState(false);
 
-  // ── Street View state
-  const [svPosition, setSvPosition] = useState(null);
-  const [svLabel, setSvLabel] = useState('');
 
   // ── Compare state
   const [compareList, setCompareList] = useState([]);
@@ -850,6 +786,7 @@ function HikeSearchContent() {
   const [savedIds, setSavedIds] = useState(new Set());
 
   const cardRefs = useRef([]);
+  const mapRef = useRef(null);
 
   // ── Network status listener
   useEffect(() => {
@@ -921,11 +858,38 @@ function HikeSearchContent() {
   }, []);
 
   const fitAllTrails = useCallback(() => {
-    if (!userLocation) return;
-    setMapCenter({ ...userLocation });
-    setMapZoom(11);
+    if (!mapRef.current || trails.length === 0) {
+      if (userLocation) {
+        setMapCenter({ ...userLocation });
+        setMapZoom(11);
+        mapRef.current?.flyTo({ center: [userLocation.lng, userLocation.lat], zoom: 11 });
+      }
+      return;
+    }
+    
+    const bounds = new maplibregl.LngLatBounds();
+    trails.forEach(t => {
+      if (t.lat && t.lng) bounds.extend([t.lng, t.lat]);
+    });
+    if (userLocation) bounds.extend([userLocation.lng, userLocation.lat]);
+    
+    mapRef.current.fitBounds(bounds, { padding: 50, duration: 1000, maxZoom: 14 });
     setSelectedIdx(null);
-  }, [userLocation]);
+  }, [userLocation, trails]);
+
+  // Auto-fit to top 3 trails when trails load
+  useEffect(() => {
+    if (trails.length > 0 && mapRef.current && status === 'done') {
+      const top = trails.slice(0, 3).filter(t => t.lat && t.lng);
+      if (top.length === 0) return;
+      
+      const bounds = new maplibregl.LngLatBounds();
+      top.forEach(t => bounds.extend([t.lng, t.lat]));
+      if (userLocation) bounds.extend([userLocation.lng, userLocation.lat]);
+      
+      mapRef.current.fitBounds(bounds, { padding: 50, duration: 1000, maxZoom: 14 });
+    }
+  }, [trails, status, userLocation]);
 
   const getLocation = () =>
     new Promise((res, rej) =>
@@ -1007,9 +971,49 @@ function HikeSearchContent() {
     [searchQuery, searchMode, preferences, groupMode, groupDescription, searchRadius]
   );
 
+  // Session Storage Caching
+  useEffect(() => {
+    if (status === 'done' && trails.length > 0) {
+      sessionStorage.setItem('odyssey_search_cache', JSON.stringify({
+        query: searchParams.get('q'),
+        status,
+        trails,
+        searchQuery,
+        source,
+        hasMore,
+        weather,
+        locationName,
+        userLocation,
+        searchMode
+      }));
+    }
+  }, [status, trails, searchQuery, source, hasMore, weather, locationName, userLocation, searchMode, searchParams]);
+
   // Auto-trigger when navigated from home
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (status !== 'idle') return;
+    
+    const cached = sessionStorage.getItem('odyssey_search_cache');
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        // If the URL has a query, it must match. If it doesn't have a query, but we have a cache, restore it.
+        if (parsed.query === query || (!query && parsed.query)) {
+          // eslint-disable-next-line react-hooks/set-state-in-effect
+          setStatus(parsed.status);
+          setTrails(parsed.trails);
+          setSearchQuery(parsed.searchQuery);
+          setSource(parsed.source);
+          setHasMore(parsed.hasMore);
+          setWeather(parsed.weather);
+          setLocationName(parsed.locationName);
+          setUserLocation(parsed.userLocation);
+          setSearchMode(parsed.searchMode || 'fast');
+          return;
+        }
+      } catch (e) {}
+    }
+
     if (query && status === 'idle') runSearch();
   }, [query]); // eslint-disable-line
 
@@ -1019,6 +1023,7 @@ function HikeSearchContent() {
     if (next !== null && trails[next]?.lat) {
       setMapCenter({ lat: trails[next].lat, lng: trails[next].lng });
       setMapZoom(14);
+      mapRef.current?.flyTo({ center: [trails[next].lng, trails[next].lat], zoom: 14 });
     }
   };
 
@@ -1104,24 +1109,12 @@ function HikeSearchContent() {
     setIsRefining(false);
   };
 
-  const openStreetView = (item) => {
-    if (item?.lat && item?.lng) {
-      setSvPosition({ lat: item.lat, lng: item.lng });
-      setSvLabel(item.name || 'Location');
-    }
-  };
-
   const hasTrails = status === 'done' && trails.length > 0;
   const hikingPrefs = preferences?.hiking || {};
   const hasPrefs = Object.values(hikingPrefs).some((v) => (Array.isArray(v) ? v.length > 0 : !!v));
 
   return (
     <div className="flex flex-col h-screen bg-slate-900 font-sans overflow-hidden">
-
-      {/* ── Full-screen Street View overlay ── */}
-      {svPosition && (
-        <StreetViewOverlay position={svPosition} label={svLabel} onClose={() => setSvPosition(null)} />
-      )}
 
       {/* ── Trail Chat drawer ── */}
       <TrailChatDrawer trail={chatTrail} open={chatOpen} onClose={() => setChatOpen(false)} />
@@ -1201,17 +1194,16 @@ function HikeSearchContent() {
       {/* ── Map strip ── */}
       {(hasTrails || userLocation) && (
         <div className="shrink-0 h-[42vh] md:h-full md:w-1/2 relative z-10 border-b md:border-b-0 md:border-l border-slate-700 order-first md:order-last flex flex-col">
-          <APIProvider apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ''}>
             <Map
-              mapId="DEMO_MAP_ID"
-              center={mapCenter || userLocation || { lat: 37.7749, lng: -122.4194 }}
-              zoom={mapZoom}
-              onZoomChanged={(e) => setMapZoom(e.detail.zoom)}
-              mapTypeId={mapType}
-              tilt={mapType === 'satellite' ? 45 : 0}
-              disableDefaultUI={true}
-              gestureHandling="auto"
+              ref={mapRef}
+              initialViewState={{
+                longitude: mapCenter?.lng || -122.4194,
+                latitude: mapCenter?.lat || 37.7749,
+                zoom: mapZoom
+              }}
+              mapStyle={OSM_STYLE}
               style={{ width: '100%', height: '100%' }}
+              onZoom={(e) => setMapZoom(e.viewState.zoom)}
             >
               {userLocation && <UserPin position={userLocation} />}
 
@@ -1230,55 +1222,18 @@ function HikeSearchContent() {
                 />
               )}
 
-              {/* Map type toggle — top left */}
-              <MapControl position={ControlPosition.TOP_LEFT}>
-                <div className="flex gap-1 m-2 bg-slate-900/90 backdrop-blur border border-slate-600 rounded-xl p-1 shadow-lg">
-                  {[['🗺️', 'roadmap', 'Map'], ['🛰️', 'satellite', 'Satellite'], ['🏔️', 'terrain', 'Terrain']].map(([icon, type, label]) => (
-                    <button
-                      key={type}
-                      onClick={() => setMapType(type)}
-                      title={label}
-                      className={`text-xs px-2.5 py-1.5 rounded-lg font-medium transition-all ${mapType === type ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}
-                    >
-                      {icon} <span className="hidden sm:inline">{label}</span>
-                    </button>
-                  ))}
-                </div>
-              </MapControl>
-
               {/* Right-side controls */}
-              <MapControl position={ControlPosition.RIGHT_CENTER}>
-                <div className="flex flex-col gap-1.5 mr-2">
-                  <button onClick={() => setMapZoom((z) => Math.min(z + 1, 20))} className="w-10 h-10 bg-slate-900/90 backdrop-blur border border-slate-600 rounded-xl text-white text-xl font-bold flex items-center justify-center shadow-lg hover:bg-slate-700 transition-colors">+</button>
-                  <button onClick={() => setMapZoom((z) => Math.max(z - 1, 3))} className="w-10 h-10 bg-slate-900/90 backdrop-blur border border-slate-600 rounded-xl text-white text-xl font-bold flex items-center justify-center shadow-lg hover:bg-slate-700 transition-colors">−</button>
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col gap-1.5 z-10">
+                  <button onClick={() => mapRef.current?.zoomTo(mapZoom + 1)} className="w-10 h-10 bg-slate-900/90 backdrop-blur border border-slate-600 rounded-xl text-white text-xl font-bold flex items-center justify-center shadow-lg hover:bg-slate-700 transition-colors">+</button>
+                  <button onClick={() => mapRef.current?.zoomTo(mapZoom - 1)} className="w-10 h-10 bg-slate-900/90 backdrop-blur border border-slate-600 rounded-xl text-white text-xl font-bold flex items-center justify-center shadow-lg hover:bg-slate-700 transition-colors">−</button>
                   {userLocation && (
-                    <button onClick={() => { setMapCenter({ ...userLocation }); setMapZoom(13); }} title="My location" className="w-10 h-10 bg-slate-900/90 backdrop-blur border border-slate-600 rounded-xl text-white text-base flex items-center justify-center shadow-lg hover:bg-slate-700 transition-colors">📍</button>
+                    <button onClick={() => { setMapCenter({ ...userLocation }); mapRef.current?.flyTo({ center: [userLocation.lng, userLocation.lat], zoom: 13 }); }} title="My location" className="w-10 h-10 bg-slate-900/90 backdrop-blur border border-slate-600 rounded-xl text-white text-base flex items-center justify-center shadow-lg hover:bg-slate-700 transition-colors">📍</button>
                   )}
                   {hasTrails && (
                     <button onClick={fitAllTrails} title="Show all trails" className="w-10 h-10 bg-slate-900/90 backdrop-blur border border-slate-600 rounded-xl text-white text-base flex items-center justify-center shadow-lg hover:bg-slate-700 transition-colors">🔭</button>
                   )}
-                  <button
-                    onClick={() => setShowTraffic((t) => !t)}
-                    title="Traffic"
-                    className={`w-10 h-10 backdrop-blur border rounded-xl text-base flex items-center justify-center shadow-lg transition-colors ${showTraffic ? 'bg-amber-600 border-amber-500 text-white' : 'bg-slate-900/90 border-slate-600 text-white hover:bg-slate-700'}`}
-                  >🚦</button>
-                  {/* Street View — opens embedded view for selected trail or user location */}
-                  <button
-                    onClick={() => {
-                      if (selectedIdx !== null && trails[selectedIdx]?.lat) {
-                        openStreetView(trails[selectedIdx]);
-                      } else if (userLocation) {
-                        setSvPosition(userLocation);
-                        setSvLabel('Your Location');
-                      }
-                    }}
-                    title="Street View"
-                    className="w-10 h-10 bg-slate-900/90 backdrop-blur border border-slate-600 rounded-xl text-white text-base flex items-center justify-center shadow-lg hover:bg-slate-700 transition-colors"
-                  >🚶</button>
-                </div>
-              </MapControl>
+              </div>
             </Map>
-          </APIProvider>
 
           {/* Count pill */}
           {hasTrails && (
@@ -1389,7 +1344,6 @@ function HikeSearchContent() {
                     isSelected={selectedIdx === i}
                     onSelect={() => selectTrail(i)}
                     cardRef={(el) => (cardRefs.current[i] = el)}
-                    onStreetView={openStreetView}
                     onAskAI={(t) => { if (!isOffline) setChatTrail(t); setChatOpen(true); }}
                     onSave={handleSaveHike}
                     isSaved={savedIds.has(`${trail.name}-${trail.lat}`)}
@@ -1404,7 +1358,6 @@ function HikeSearchContent() {
                     isSelected={selectedIdx === i}
                     onSelect={() => selectTrail(i)}
                     cardRef={(el) => (cardRefs.current[i] = el)}
-                    onStreetView={openStreetView}
                     onSave={handleSaveHike}
                     isSaved={savedIds.has(`${trail.name}-${trail.lat}`)}
                   />
@@ -1416,6 +1369,7 @@ function HikeSearchContent() {
               
               {hasMore && (
                 <button
+                  type="button"
                   onClick={loadMore}
                   disabled={isLoadingMore}
                   className="w-full py-3 mb-24 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-white font-medium rounded-xl border border-slate-700 transition-colors flex items-center justify-center gap-2"
