@@ -66,7 +66,10 @@ export default function DynamicActionCards() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: cards.length * 0.05, duration: 0.4, ease: "easeOut" }}
-        className="group block relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/10 p-6 shadow-xl ring-1 ring-white/20 transition-all duration-300 hover:-translate-y-2 hover:bg-indigo-500/30 hover:shadow-2xl hover:ring-white/40 backdrop-blur-md h-full flex flex-col justify-between"
+        onClick={() => {
+          if (!showZipInput) setShowZipInput(true);
+        }}
+        className="cursor-pointer group block relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/10 p-6 shadow-xl ring-1 ring-white/20 transition-all duration-300 hover:-translate-y-2 hover:bg-indigo-500/30 hover:shadow-2xl hover:ring-white/40 backdrop-blur-md h-full flex flex-col justify-between"
       >
         <div className="flex items-center justify-center w-12 h-12 rounded-full bg-indigo-500/30 text-indigo-200 mb-4 text-2xl group-hover:scale-110 transition-transform duration-300 shadow-[0_0_15px_rgba(99,102,241,0.5)]">
           📍
