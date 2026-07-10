@@ -1045,6 +1045,7 @@ function HikeSearchContent() {
   const [mapType, setMapType] = useState('roadmap');
   const [mapZoom, setMapZoom] = useState(12);
   const [showTraffic, setShowTraffic] = useState(false);
+  const [is3D, setIs3D] = useState(true);
 
   // ── Refinement state
   const [conversation, setConversation] = useState([]);
@@ -1454,6 +1455,16 @@ function HikeSearchContent() {
       mapRef.current.fitBounds(bounds, { padding: 50, duration: 1000, maxZoom: 14 });
     }
   }, [trails, status, userLocation]);
+
+  useEffect(() => {
+    if (mapRef.current) {
+      mapRef.current.easeTo({
+        pitch: is3D ? 60 : 0,
+        bearing: is3D ? 15 : 0,
+        duration: 1000
+      });
+    }
+  }, [is3D]);
 
   function getLocation() {
     return new Promise((res, rej) =>
@@ -2173,12 +2184,35 @@ function HikeSearchContent() {
               initialViewState={{
                 longitude: mapCenter?.lng || -122.4194,
                 latitude: mapCenter?.lat || 37.7749,
-                zoom: mapZoom
+                zoom: mapZoom,
+                pitch: is3D ? 60 : 0,
+                bearing: is3D ? 15 : 0
               }}
+              terrain={is3D ? { source: 'terrainSource', exaggeration: 1.5 } : undefined}
               mapStyle={OSM_STYLE}
               style={{ width: '100%', height: '100%' }}
               onZoom={(e) => setMapZoom(e.viewState.zoom)}
             >
+              {is3D && (
+                <>
+                  <Source
+                    id="terrainSource"
+                    type="raster-dem"
+                    url="https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
+                    encoding="terrarium"
+                  />
+                  <Layer
+                    id="hillshade-layer"
+                    type="hillshade"
+                    source="terrainSource"
+                    paint={{
+                      'hillshade-shadow-color': '#475569',
+                      'hillshade-highlight-color': '#f8fafc',
+                      'hillshade-accent-color': '#1e293b'
+                    }}
+                  />
+                </>
+              )}
               {userLocation && <UserPin position={userLocation} heading={deviceHeading} />}
 
               {/* Live Tracked Path */}
@@ -2240,6 +2274,17 @@ function HikeSearchContent() {
               <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col gap-1.5 z-10">
                   <button onClick={() => mapRef.current?.zoomTo(mapZoom + 1)} className="w-10 h-10 bg-slate-900/90 backdrop-blur border border-slate-600 rounded-xl text-white text-xl font-bold flex items-center justify-center shadow-lg hover:bg-slate-700 transition-colors">+</button>
                   <button onClick={() => mapRef.current?.zoomTo(mapZoom - 1)} className="w-10 h-10 bg-slate-900/90 backdrop-blur border border-slate-600 rounded-xl text-white text-xl font-bold flex items-center justify-center shadow-lg hover:bg-slate-700 transition-colors">−</button>
+                  <button
+                    onClick={() => setIs3D(!is3D)}
+                    title={is3D ? "Switch to 2D Top-Down" : "Switch to 3D Terrain"}
+                    className={`w-10 h-10 backdrop-blur border rounded-xl text-base flex items-center justify-center shadow-lg transition-colors font-bold ${
+                      is3D 
+                        ? 'bg-emerald-600/90 border-emerald-400 text-white' 
+                        : 'bg-slate-900/90 border-slate-600 text-slate-300 hover:bg-slate-700'
+                    }`}
+                  >
+                    3D
+                  </button>
                   <button 
                     onClick={() => setMapRotationMode(prev => prev === 'north' ? 'compass' : 'north')}
                     title={mapRotationMode === 'north' ? "Switch to Compass Up" : "Switch to North Up"}

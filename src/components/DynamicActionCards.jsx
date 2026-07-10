@@ -47,7 +47,7 @@ export default function DynamicActionCards() {
            if (!newCards.find(c => c.title === "Hikes near me")) newCards.unshift({ title: "Hikes near me", icon: "🥾", description: "Find the best trails and nature walks.", href: "/search?q=hikes" });
            if (!newCards.find(c => c.title === "Food I like")) newCards.unshift({ title: "Food I like", icon: "🍔", description: "Discover restaurants based on your taste.", href: "/search?q=food" });
         }
-        
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setCards(newCards.slice(0, 4));
       } catch (e) {
         console.error(e);
