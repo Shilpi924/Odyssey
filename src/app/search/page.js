@@ -2223,6 +2223,13 @@ function HikeSearchContent() {
               mapStyle={OSM_STYLE}
               style={{ width: '100%', height: '100%' }}
               onZoom={(e) => setMapZoom(e.viewState.zoom)}
+              onError={(e) => {
+                if (e.error?.message?.includes('404')) {
+                  console.warn('MapLibre expected 404 (missing tile level):', e.error.message);
+                } else {
+                  console.error('Map error:', e);
+                }
+              }}
             >
               {is3D && (
                 <>
