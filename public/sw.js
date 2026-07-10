@@ -5,7 +5,17 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME) {
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    }).then(() => self.clients.claim())
+  );
 });
 
 self.addEventListener('fetch', (event) => {
@@ -14,21 +24,27 @@ self.addEventListener('fetch', (event) => {
   // Intercept requests to CartoDB tiles
   if (url.hostname.includes('cartocdn.com') && url.pathname.includes('/rastertiles/voyager/')) {
     event.respondWith(
-      caches.match(event.request).then((cachedResponse) => {
-        if (cachedResponse) {
-          // If we have it in cache, serve it immediately (offline support)
-          return cachedResponse;
-        }
+      caches.open(CACHE_NAME).then((cache) => {
+        return cache.match(event.request).then((cachedResponse) => {
+          if (cachedResponse) {
+            // Serve from cache
+            return cachedResponse;
+          }
 
-        // Otherwise fetch from network
-        return fetch(event.request)
-          .then((networkResponse) => {
-            return networkResponse;
-          })
-          .catch(() => {
-            // Offline and not in cache, return a generic error or a blank tile
-            return new Response('', { status: 404, statusText: 'Not Found' });
-          });
+          // Otherwise fetch from network
+          return fetch(event.request)
+            .then((networkResponse) => {
+              // Only cache valid responses
+              if (networkResponse && networkResponse.status === 200) {
+                cache.put(event.request, networkResponse.clone());
+              }
+              return networkResponse;
+            })
+            .catch(() => {
+              // Offline and not in cache, return a generic error
+              return new Response('', { status: 404, statusText: 'Not Found' });
+            });
+        });
       })
     );
   }

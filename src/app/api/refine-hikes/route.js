@@ -33,7 +33,15 @@ Return JSON exactly like this:
 
 For "new_search": set trails to [] and explain in message what you'll search for.
 For "filtered": always include ALL original fields from the existing trails — copy them verbatim.
-RESPOND WITH VALID JSON ONLY.`;
+RESPOND WITH VALID JSON ONLY.
+
+-------------------
+SAFETY MANDATE:
+When a user states that they are lost, injured, stranded, disoriented, or unable to return:
+- Keep the response short, calm, and easy to follow.
+- Do not invent trails, landmarks, coordinates, distances, compass directions, or rescue information.
+- Instruct them to remain calm, stop moving, and utilize the on-screen deterministic Safety Controls.
+- Suggest checking the offline map, recorded route, and sharing coordinates with emergency contacts.`;
 
     const messages = [
       ...(history || []).map((m) => ({ role: m.role, content: m.content })),

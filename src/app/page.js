@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import ActionCard from '../components/ActionCard';
+import DynamicActionCards from '../components/DynamicActionCards';
 import HomeSearchBar from '../components/HomeSearchBar';
 
 export default function Home() {
@@ -22,32 +22,7 @@ export default function Home() {
 
         <HomeSearchBar />
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 w-full mb-16">
-          <ActionCard 
-            title="Hikes near me"
-            icon="🥾"
-            description="Find the best trails and nature walks."
-            href="/search?q=hikes"
-          />
-          <ActionCard 
-            title="Food I like"
-            icon="🍔"
-            description="Discover restaurants based on your taste."
-            href="/search?q=food"
-          />
-          <ActionCard 
-            title="Suggested for you"
-            icon="✨"
-            description="Discover what like-minded people with your interests are doing."
-            href="/search?q=popular activities for people like me"
-          />
-          <ActionCard 
-            title="Kid-friendly"
-            icon="👨‍👩‍👧‍👦"
-            description="Activities perfect for you and your kids."
-            href="/search?q=kids"
-          />
-        </div>
+        <DynamicActionCards />
 
         <div className="text-center bg-white/5 backdrop-blur-lg p-8 rounded-3xl border border-white/10 w-full max-w-2xl">
           <h2 className="text-2xl font-bold text-white mb-4">Want better recommendations?</h2>

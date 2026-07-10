@@ -7,7 +7,7 @@ import Map, { Marker, Source, Layer } from 'react-map-gl/maplibre';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { db } from '@/lib/db';
-import { downloadAreaTiles } from '@/lib/offline-maps';
+import { downloadAreaTiles, deleteAreaTiles } from '@/lib/offline-maps';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
@@ -118,7 +118,7 @@ const QUICK_QUESTIONS = [
   'Best viewpoint?',
 ];
 
-function TrailChatDrawer({ trail, open, onClose }) {
+function TrailChatDrawer({ trail, open, onClose, onTriggerSafetyMode }) {
   const [history, setHistory] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -127,6 +127,14 @@ function TrailChatDrawer({ trail, open, onClose }) {
 
   const sendMessage = async (msg) => {
     if (!msg.trim() || loading) return;
+
+    // Intercept Safety Keywords
+    const safetyKeywords = ['lost', 'injured', 'stranded', 'disoriented', 'unable to return', "i'm lost", "i am lost"];
+    if (safetyKeywords.some(keyword => msg.toLowerCase().includes(keyword))) {
+      onTriggerSafetyMode?.();
+      return;
+    }
+
     const userMsg = { role: 'user', content: msg };
     const next = [...history, userMsg];
     setHistory(next);
@@ -344,7 +352,8 @@ function TrailPin({ trail, index, isSelected, onClick }) {
   );
 }
 
-function UserPin({ position }) {
+function UserPin({ position, heading }) {
+  const rotation = heading !== null ? heading : 0;
   return (
     <Marker longitude={position.lng} latitude={position.lat} style={{ zIndex: 200 }}>
       <div className="flex flex-col items-center gap-1">
@@ -353,6 +362,18 @@ function UserPin({ position }) {
         </div>
         <div className="w-0.5 h-2 bg-blue-500" />
         <div className="relative flex items-center justify-center">
+          {/* Compass Direction Cone */}
+          {heading !== null && (
+            <div 
+              className="absolute w-16 h-16 pointer-events-none transition-transform duration-300 ease-out"
+              style={{ 
+                transform: `rotate(${rotation}deg)`,
+                background: 'radial-gradient(circle at top, rgba(59,130,246,0.3) 0%, rgba(59,130,246,0) 70%)',
+                clipPath: 'polygon(50% 50%, 20% 0%, 80% 0%)',
+                top: '-24px'
+              }}
+            />
+          )}
           <div className="absolute w-10 h-10 bg-blue-500/30 rounded-full animate-ping" />
           <div className="w-5 h-5 bg-blue-500 border-2 border-white rounded-full shadow-lg" />
         </div>
@@ -361,12 +382,12 @@ function UserPin({ position }) {
   );
 }
 
-function MapPopup({ trail, index, onClose, onScrollToCard }) {
+function MapPopup({ trail, index, onClose, onScrollToCard, onStartHike, downloadProgress }) {
   const d = getPinColor(index);
   const diffBadge = getDiff(trail.difficulty);
   return (
     <Marker longitude={trail.lng} latitude={trail.lat} style={{ zIndex: 300 }}>
-      <div className="mb-14 w-64 bg-slate-900 border border-slate-600 rounded-2xl shadow-2xl p-4 relative">
+      <div className="mb-14 w-64 bg-slate-900 border border-slate-600 rounded-2xl shadow-2xl p-4 relative overflow-hidden">
         <button
           onClick={(e) => { e.stopPropagation(); onClose(); }}
           className="absolute top-2 right-2 w-6 h-6 rounded-full bg-slate-700 text-slate-400 hover:text-white text-xs flex items-center justify-center"
@@ -390,11 +411,21 @@ function MapPopup({ trail, index, onClose, onScrollToCard }) {
               e.stopPropagation();
               onStartHike(trail);
             }}
-            className="flex-1 text-xs py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors font-medium"
+            className="flex-1 text-sm bg-slate-700 hover:bg-slate-600 text-white py-2.5 rounded-xl font-medium transition-colors"
           >
             🚶 Start Hike
           </button>
         </div>
+        
+        {/* Download Progress Bar */}
+        {downloadProgress && (
+          <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-slate-800">
+            <div 
+              className="h-full bg-blue-500 transition-all duration-300"
+              style={{ width: `${Math.max(5, (downloadProgress.count / downloadProgress.total) * 100)}%` }}
+            />
+          </div>
+        )}
       </div>
     </Marker>
   );
@@ -433,9 +464,28 @@ function Sparkline({ data }) {
   );
 }
 
+// ─── Skeleton Trail Card ───────────────────────────────────────────────────────
+
+function SkeletonTrailCard() {
+  return (
+    <div className="bg-slate-800/70 border border-slate-700/50 rounded-2xl overflow-hidden shadow-md animate-pulse">
+      <div className="h-36 w-full bg-slate-700/50"></div>
+      <div className="p-5 flex flex-col gap-3">
+        <div className="h-5 w-3/4 bg-slate-700 rounded"></div>
+        <div className="h-4 w-1/2 bg-slate-700 rounded"></div>
+        <div className="flex gap-2 mt-2">
+          <div className="h-8 w-20 bg-slate-700 rounded-xl"></div>
+          <div className="h-8 w-20 bg-slate-700 rounded-xl"></div>
+          <div className="h-8 w-20 bg-slate-700 rounded-xl"></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── AI Trail Card ─────────────────────────────────────────────────────────────
 
-function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetView, onAskAI, onSave, isSaved, onCompareToggle, isComparing, onStartHike }) {
+function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetView, onAskAI, onSave, isSaved, onCompareToggle, isComparing, onStartHike, downloadProgress }) {
   const d = getPinColor(index);
   const diffBadge = getDiff(trail.difficulty);
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
@@ -455,8 +505,8 @@ function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetView
       dragElastic={0.2}
       onDragEnd={handleDragEnd}
       onClick={onSelect}
-      className={`bg-slate-800/70 backdrop-blur border rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 relative ${
-        isSelected ? `${d.border} shadow-xl ${d.shadow} ring-1 ${d.ring}` : 'border-slate-700 hover:border-slate-500'
+      className={`bg-slate-800/80 backdrop-blur-md border rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 relative shadow-lg ${
+        isSelected ? `${d.border} shadow-2xl ${d.shadow} ring-2 ${d.ring} -translate-y-1` : 'border-slate-700/70 hover:border-slate-500 hover:shadow-xl hover:-translate-y-0.5'
       } ${isComparing ? 'ring-2 ring-emerald-500' : ''}`}
     >
       {/* Swipe Indicator (Background) */}
@@ -494,18 +544,25 @@ function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetView
 
       <div className="p-5 flex flex-col gap-3">
         {/* Header row */}
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <h3 className="text-white font-bold text-base leading-tight">{trail.name}</h3>
-            <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400">
-              <span>📍 {trail.distance}</span>
-              {trail.rating && (
-                <span className="flex items-center gap-0.5">
-                  <span className="text-amber-400">★</span> {trail.rating}
-                  {trail.userRatingsTotal > 0 && ` (${trail.userRatingsTotal.toLocaleString()} on Google Maps)`}
-                </span>
-              )}
-            </div>
+        <div className="flex flex-col gap-1.5">
+          <h3 className="text-white font-bold text-[17px] leading-tight tracking-tight">{trail.name}</h3>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-300 font-medium">
+            <span className="flex items-center gap-1 text-slate-400">
+              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"></path></svg>
+              {trail.distance}
+            </span>
+            {trail.rating && (
+              <span className="flex items-center gap-1 bg-amber-500/10 text-amber-300 px-2 py-0.5 rounded-md border border-amber-500/20">
+                <svg className="w-3 h-3 text-amber-400" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+                {trail.rating}
+                {trail.userRatingsTotal > 0 && <span className="text-amber-400/70 ml-0.5">({trail.userRatingsTotal.toLocaleString()})</span>}
+              </span>
+            )}
+            {trail.estimatedWeeklyVisitors > 0 && (
+              <span className="flex items-center gap-1 text-slate-400">
+                👥 ~{trail.estimatedWeeklyVisitors.toLocaleString()}/wk
+              </span>
+            )}
           </div>
         </div>
 
@@ -577,15 +634,27 @@ function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetView
           >
             {isSaved ? '✓ Saved Offline' : '💾 Download Map'}
           </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onStartHike(trail);
-            }}
-            className="flex-1 text-xs py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl transition-colors font-medium"
-          >
-            🚶 Start Hike
-          </button>
+          {trail.difficulty ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onStartHike(trail);
+              }}
+              className="flex-1 text-xs py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl transition-colors font-medium"
+            >
+              🚶 Start Hike
+            </button>
+          ) : (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                window.open(`https://www.google.com/maps/dir/?api=1&destination=${trail.lat},${trail.lng}`, '_blank');
+              }}
+              className="flex-1 text-xs py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl transition-colors font-medium"
+            >
+              🗺️ Navigate
+            </button>
+          )}
           <button
             onClick={(e) => { e.stopPropagation(); onAskAI(trail); }}
             className="flex-1 text-xs py-2.5 bg-indigo-900/50 hover:bg-indigo-800/60 border border-indigo-500/30 text-indigo-300 rounded-xl transition-colors font-medium"
@@ -604,13 +673,22 @@ function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetView
         </AnimatePresence>
       </div>
       </div>
+      {/* Download Progress Bar */}
+      {downloadProgress && (
+        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-slate-800">
+          <div 
+            className="h-full bg-blue-500 transition-all duration-300"
+            style={{ width: `${Math.max(5, (downloadProgress.count / downloadProgress.total) * 100)}%` }}
+          />
+        </div>
+      )}
     </motion.div>
   );
 }
 
 // ─── Fast Trail Card (Google Places) ──────────────────────────────────────────
 
-function FastTrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetView, onSave, isSaved, onStartHike }) {
+function FastTrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetView, onSave, isSaved, onStartHike, downloadProgress }) {
   const d = getPinColor(index);
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const [imgLoaded, setImgLoaded] = useState(false);
@@ -622,8 +700,8 @@ function FastTrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetVi
     <div
       ref={cardRef}
       onClick={onSelect}
-      className={`${d.cardBg} backdrop-blur border rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 ${
-        isSelected ? `${d.border} shadow-xl ${d.shadow} ring-1 ${d.ring}` : 'border-slate-700 hover:border-slate-500'
+      className={`${d.cardBg} backdrop-blur-md border rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 shadow-lg relative ${
+        isSelected ? `${d.border} shadow-2xl ${d.shadow} ring-2 ${d.ring} -translate-y-1` : 'border-slate-700/70 hover:border-slate-500 hover:shadow-xl hover:-translate-y-0.5'
       }`}
     >
       {trail.lat && trail.lng && (
@@ -653,11 +731,28 @@ function FastTrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetVi
         </div>
       )}
 
-      <div className="p-4 flex flex-col gap-2">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <h3 className="text-white font-bold text-base leading-tight">{trail.name}</h3>
-            <p className="text-slate-500 text-xs mt-0.5 truncate">{trail.vicinity}</p>
+      <div className="p-5 flex flex-col gap-2">
+        <div className="flex flex-col gap-1.5">
+          <h3 className="text-white font-bold text-[17px] leading-tight tracking-tight">{trail.name}</h3>
+          <p className="text-slate-400 text-xs truncate">{trail.vicinity}</p>
+          
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-300 font-medium mt-0.5">
+            <span className="flex items-center gap-1 text-slate-400">
+              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"></path></svg>
+              {trail.distance}
+            </span>
+            {trail.rating && (
+              <span className="flex items-center gap-1 bg-amber-500/10 text-amber-300 px-2 py-0.5 rounded-md border border-amber-500/20">
+                <svg className="w-3 h-3 text-amber-400" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+                {trail.rating}
+                {trail.userRatingsTotal > 0 && <span className="text-amber-400/70 ml-0.5">({trail.userRatingsTotal.toLocaleString()})</span>}
+              </span>
+            )}
+            {trail.estimatedWeeklyVisitors > 0 && (
+              <span className="flex items-center gap-1 text-slate-400">
+                👥 ~{trail.estimatedWeeklyVisitors.toLocaleString()}/wk
+              </span>
+            )}
           </div>
         </div>
         <AnimatePresence>
@@ -668,17 +763,7 @@ function FastTrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetVi
               exit={{ height: 0, opacity: 0, marginTop: 0 }}
               className="flex flex-col gap-2 overflow-hidden"
             >
-        <div className="flex items-center gap-2 text-xs text-slate-400">
-          <span>📍 {trail.distance}</span>
-          {trail.rating && (
-            <span className="flex items-center gap-0.5">
-              <span className="text-amber-400">★</span> {trail.rating}
-              {trail.userRatingsTotal > 0 && ` (${trail.userRatingsTotal.toLocaleString()} on Google Maps)`}
-            </span>
-          )}
-          {trail.estimatedWeeklyVisitors && <span className="opacity-70">👥 ~{trail.estimatedWeeklyVisitors.toLocaleString()}/wk</span>}
-        </div>
-        <div className="flex gap-2 pt-1">
+        <div className="flex gap-2 pt-2">
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -688,20 +773,41 @@ function FastTrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetVi
           >
             {isSaved ? '✓ Saved Offline' : '💾 Download Map'}
           </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onStartHike(trail);
-            }}
-            className="flex-1 text-xs py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl transition-colors font-medium"
-          >
-            🚶 Start Hike
-          </button>
+          {trail.difficulty ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onStartHike(trail);
+              }}
+              className="flex-1 text-xs py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl transition-colors font-medium"
+            >
+              🚶 Start Hike
+            </button>
+          ) : (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                window.open(`https://www.google.com/maps/dir/?api=1&destination=${trail.lat},${trail.lng}`, '_blank');
+              }}
+              className="flex-1 text-xs py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl transition-colors font-medium"
+            >
+              🗺️ Navigate
+            </button>
+          )}
         </div>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+      {/* Download Progress Bar */}
+      {downloadProgress && (
+        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-slate-800">
+          <div 
+            className="h-full bg-blue-500 transition-all duration-300"
+            style={{ width: `${Math.max(5, (downloadProgress.count / downloadProgress.total) * 100)}%` }}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -719,6 +825,185 @@ function ConvBubble({ msg }) {
         {msg.role === 'assistant' && <span className="mr-1.5">🤖</span>}
         {msg.display}
       </div>
+    </div>
+  );
+}
+
+// ─── Safety Panel & Helpers ───────────────────────────────────────────────────
+
+const SILENT_WAV = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+
+const startBackgroundAudio = () => {
+  try {
+    const audio = new Audio(SILENT_WAV);
+    audio.loop = true;
+    audio.play().catch(e => console.warn('Failed to play background audio:', e));
+    return audio;
+  } catch (e) {
+    console.warn('Background audio failed:', e);
+    return null;
+  }
+};
+
+function SafetyPanel({ userLocation, onClose, isOffline }) {
+  const [step, setStep] = useState('initial'); // 'initial' | 'danger' | 'safe'
+  
+  const handleShareLocation = () => {
+    const lat = userLocation?.lat?.toFixed(5) || 'Unknown';
+    const lng = userLocation?.lng?.toFixed(5) || 'Unknown';
+    const acc = userLocation?.accuracy ? Math.round(userLocation.accuracy) : 'unknown';
+    const elev = userLocation?.elevation ? Math.round(userLocation.elevation * 3.28084) : 'unknown';
+    
+    const text = `I am hiking and am lost. My coordinates are: Lat ${lat}, Lng ${lng} (Accuracy: ${acc}m, Elevation: ${elev}ft). Please help.`;
+    
+    if (navigator.share) {
+      navigator.share({
+        title: 'My Hiking Coordinates',
+        text: text,
+      }).catch(console.error);
+    } else {
+      navigator.clipboard.writeText(text);
+      alert('Location copied to clipboard! You can paste it into SMS or an email.');
+    }
+  };
+
+  const latText = userLocation?.lat?.toFixed(5) || 'Fetching...';
+  const lngText = userLocation?.lng?.toFixed(5) || 'Fetching...';
+  const accText = userLocation?.accuracy ? `${Math.round(userLocation.accuracy * 3.28084)} ft` : 'Unavailable';
+  const elevText = userLocation?.elevation ? `${Math.round(userLocation.elevation * 3.28084)} ft` : 'Unavailable';
+  const timeText = userLocation?.timestamp ? new Date(userLocation.timestamp).toLocaleTimeString() : 'Unavailable';
+
+  return (
+    <div className="bg-slate-900 border border-red-500/30 rounded-3xl p-6 flex flex-col gap-6 shadow-2xl relative">
+      <button 
+        onClick={onClose}
+        className="absolute top-4 right-4 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white px-3 py-1.5 rounded-full text-xs font-bold transition-all"
+      >
+        ✕ Exit Safety
+      </button>
+
+      <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
+        <span className="text-3xl animate-pulse">🆘</span>
+        <div>
+          <h2 className="text-white font-bold text-lg">Safety Mode</h2>
+          <p className="text-slate-400 text-xs">Deterministic Emergency Guidelines</p>
+        </div>
+      </div>
+
+      {/* GPS Information Box */}
+      <div className="bg-slate-955 border border-slate-800 rounded-2xl p-4 flex flex-col gap-2">
+        <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Live Coordinates</div>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <span className="text-slate-400 block text-xs">Latitude</span>
+            <span className="text-white font-mono font-bold text-base">{latText}</span>
+          </div>
+          <div>
+            <span className="text-slate-400 block text-xs">Longitude</span>
+            <span className="text-white font-mono font-bold text-base">{lngText}</span>
+          </div>
+          <div>
+            <span className="text-slate-400 block text-xs">Accuracy</span>
+            <span className={`font-mono font-semibold ${userLocation?.accuracy > 15 ? 'text-amber-400' : 'text-emerald-400'}`}>
+              {accText}
+            </span>
+          </div>
+          <div>
+            <span className="text-slate-400 block text-xs">Elevation</span>
+            <span className="text-white font-mono font-semibold">{elevText}</span>
+          </div>
+        </div>
+        <div className="text-[10px] text-slate-500 border-t border-slate-900/50 pt-2 mt-1">
+          Last updated: {timeText} | Status: {isOffline ? 'Offline' : 'Connected'}
+        </div>
+      </div>
+
+      {step === 'initial' && (
+        <div className="flex flex-col gap-4">
+          <p className="text-slate-300 text-sm leading-relaxed text-center">
+            Are you injured, experiencing a medical emergency, or in immediate danger?
+          </p>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => setStep('danger')}
+              className="w-full py-4 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-2xl shadow-lg transition-all duration-200 text-base"
+            >
+              ⚠️ YES, I&apos;m in danger
+            </button>
+            <button
+              onClick={() => setStep('safe')}
+              className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-2xl shadow-lg transition-all duration-200 text-base"
+            >
+              🌿 NO, I&apos;m lost but safe
+            </button>
+          </div>
+        </div>
+      )}
+
+      {step === 'danger' && (
+        <div className="flex flex-col gap-5">
+          <div className="p-4 bg-rose-950/20 border border-rose-500/30 rounded-2xl text-rose-200 text-sm leading-relaxed space-y-2">
+            <p className="font-bold text-rose-300">🚨 Immediate Danger Instructions:</p>
+            <ul className="list-disc pl-5 space-y-1 text-xs">
+              <li>Tap below to call local emergency services immediately.</li>
+              <li>Read your coordinates exactly to the dispatcher.</li>
+              <li>Tell them about any injuries, food, water, and clothing.</li>
+              <li>Describe nearby visible landmarks or ridges.</li>
+            </ul>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <a
+              href="tel:911"
+              className="w-full py-4 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-2xl shadow-lg transition-all duration-200 text-base text-center block"
+            >
+              📞 Call Emergency Services (911)
+            </a>
+            <button
+              onClick={handleShareLocation}
+              className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-2xl transition-all duration-200 text-sm"
+            >
+              ✉️ Share Coordinates with Emergency Contact
+            </button>
+            <button
+              onClick={() => setStep('initial')}
+              className="text-slate-400 hover:text-white text-xs font-semibold text-center mt-2"
+            >
+              ← Back to question
+            </button>
+          </div>
+        </div>
+      )}
+
+      {step === 'safe' && (
+        <div className="flex flex-col gap-5">
+          <div className="p-4 bg-emerald-950/20 border border-emerald-500/30 rounded-2xl text-emerald-200 text-sm leading-relaxed space-y-2">
+            <p className="font-bold text-emerald-300">🛑 Safe but Lost Instructions:</p>
+            <ul className="list-disc pl-5 space-y-1 text-xs">
+              <li><strong>STOP MOVING.</strong> Do not hike blindly to avoid getting further lost.</li>
+              <li>Check the offline map to your right to retrace your tracked route (green line).</li>
+              <li>Conserve battery: Dim screen, close other apps, put phone in low power mode.</li>
+              <li>Stay visible. Keep warm or shaded as weather dictates.</li>
+              <li>Use a whistle (3 short blasts) or mirror to signal rescuers.</li>
+            </ul>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={handleShareLocation}
+              className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-2xl shadow-lg transition-all duration-200 text-base"
+            >
+              ✉️ Share Location with Contacts
+            </button>
+            <button
+              onClick={() => setStep('initial')}
+              className="text-slate-400 hover:text-white text-xs font-semibold text-center mt-2"
+            >
+              ← Back to question
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -747,6 +1032,12 @@ function HikeSearchContent() {
   const [groupMode, setGroupMode] = useState(false);
   const [groupDescription, setGroupDescription] = useState('');
   const [searchRadius, setSearchRadius] = useState(25);
+  const [priceRange, setPriceRange] = useState('');
+  
+  // ── Preloading cache
+  const [preloadedData, setPreloadedData] = useState(null);
+  const [isPreloading, setIsPreloading] = useState(false);
+  const [preloadedKey, setPreloadedKey] = useState(null);
 
   // ── Map state
   const [selectedIdx, setSelectedIdx] = useState(null);
@@ -793,6 +1084,7 @@ function HikeSearchContent() {
   // ── Offline & Saved state
   const [isOffline, setIsOffline] = useState(false);
   const [savedIds, setSavedIds] = useState(new Set());
+  const [downloadProgress, setDownloadProgress] = useState(null);
 
   const handleSaveHike = async (trail) => {
     try {
@@ -800,6 +1092,9 @@ function HikeSearchContent() {
       if (savedIds.has(id)) {
         await db.savedHikes.where('id').equals(id).delete();
         setSavedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
+        if (trail.lat && trail.lng) {
+          deleteAreaTiles(trail).catch(console.error);
+        }
       } else {
         // 1. Fetch map image to blob via our proxy to bypass CORS
         let blob = null;
@@ -822,7 +1117,14 @@ function HikeSearchContent() {
         setSavedIds(prev => new Set(prev).add(id));
         // Trigger background download of map tiles for this area
         if (trail.lat && trail.lng) {
-          downloadAreaTiles(trail.lat, trail.lng).catch(console.error);
+          downloadAreaTiles(trail, (count, total) => {
+            setDownloadProgress({ id, count, total });
+          }).then(() => {
+            setDownloadProgress(null); // complete
+          }).catch(e => {
+            console.error('Download error:', e);
+            setDownloadProgress(null);
+          });
         }
       }
     } catch (err) {
@@ -840,9 +1142,59 @@ function HikeSearchContent() {
   const [hikeDuration, setHikeDuration] = useState(0);
   const [hikeElevationGain, setHikeElevationGain] = useState(0);
   const [hikeSpeed, setHikeSpeed] = useState(0);
+  const [hikeHeading, setHikeHeading] = useState(null);
+  const [isPaused, setIsPaused] = useState(false);
   const watchIdRef = useRef(null);
   const timerRef = useRef(null);
   const lastLocRef = useRef(null);
+
+  // ── Safety Mode, Compass Heading, Rotation Mode & Trail Track States
+  const [hikePath, setHikePath] = useState([]);
+  const [rawPath, setRawPath] = useState([]);
+  const [isSafetyMode, setIsSafetyMode] = useState(false);
+  const [deviceHeading, setDeviceHeading] = useState(null);
+  const [mapRotationMode, setMapRotationMode] = useState('north'); // 'north' | 'compass'
+  const [gpsStatus, setGpsStatus] = useState('Acquiring'); // 'Acquiring' | 'Good' | 'Weak' | 'Unavailable' | 'Denied'
+  const [altitudeHistory, setAltitudeHistory] = useState([]); // rolling altitude points for smoothing
+  const [wakeLock, setWakeLock] = useState(null);
+  const [recoveredHike, setRecoveredHike] = useState(null);
+  const [showRecoveryModal, setShowRecoveryModal] = useState(false);
+  
+  const audioRef = useRef(null);
+  const hikeTimingsRef = useRef({ startedAt: 0, totalPausedMs: 0, pausedAt: 0 });
+
+  // ── Screen Wake Lock Helpers
+  const requestWakeLock = async () => {
+    if ('wakeLock' in navigator) {
+      try {
+        const lock = await navigator.wakeLock.request('screen');
+        setWakeLock(lock);
+        console.log('Screen Wake Lock acquired.');
+      } catch (err) {
+        console.warn('Screen Wake Lock failed:', err.message);
+      }
+    }
+  };
+
+  const releaseWakeLock = () => {
+    if (wakeLock) {
+      try {
+        wakeLock.release().then(() => setWakeLock(null));
+        console.log('Screen Wake Lock released.');
+      } catch {}
+    }
+  };
+
+  // Re-acquire wake lock if tab is refocused
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible' && isHiking && !isPaused) {
+        await requestWakeLock();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [isHiking, isPaused, wakeLock]);
 
   // ── Network status listener & Service Worker
   useEffect(() => {
@@ -870,15 +1222,154 @@ function HikeSearchContent() {
     loadSaved();
   }, []);
 
+  // ── Auto-Recovery: Restore Active Hike Session from IndexedDB on Mount
+  useEffect(() => {
+    const checkActiveSession = async () => {
+      try {
+        const activeRecord = await db.activeHikes.where('status').equals('active').first();
+        if (activeRecord) {
+          // Load route points from IndexedDB
+          const points = await db.activeHikePoints
+            .where('hikeId')
+            .equals(activeRecord.id)
+            .toArray();
+          
+          const sortedPoints = points.sort((a, b) => a.timestamp - b.timestamp);
+          const accepted = sortedPoints.filter(p => p.accepted);
+          
+          setHikeDistance(activeRecord.distanceMeters / 1609.344); // meters to miles
+          setHikeElevationGain(activeRecord.elevationGainMeters * 3.28084); // meters to feet
+          setHikePath(accepted.map(p => [p.longitude, p.latitude]));
+          setRawPath(sortedPoints.map(p => [p.longitude, p.latitude]));
+          setIsPaused(activeRecord.pausedAt !== null);
+
+          // Compute accurate recovered elapsed duration from timestamps
+          const now = Date.now();
+          const duration = Math.floor(
+            ((activeRecord.pausedAt || now) - activeRecord.startedAt - activeRecord.totalPausedMs) / 1000
+          );
+          setHikeDuration(duration);
+
+          hikeTimingsRef.current = {
+            startedAt: activeRecord.startedAt,
+            totalPausedMs: activeRecord.totalPausedMs,
+            pausedAt: activeRecord.pausedAt
+          };
+
+          setRecoveredHike(activeRecord);
+          setShowRecoveryModal(true);
+        }
+      } catch (err) {
+        console.error('Failed to restore active hike session:', err);
+      }
+    };
+    checkActiveSession();
+  }, []);
+
+  // ── Auto-Save Active Hike Session Metadata to IndexedDB
+  useEffect(() => {
+    if (isHiking && activeHike && recoveredHike) {
+      const saveMetadata = async () => {
+        try {
+          await db.activeHikes.put({
+            id: recoveredHike.id,
+            name: activeHike.name,
+            status: 'active',
+            startedAt: hikeTimingsRef.current.startedAt,
+            pausedAt: hikeTimingsRef.current.pausedAt,
+            totalPausedMs: hikeTimingsRef.current.totalPausedMs,
+            distanceMeters: hikeDistance * 1609.344, // miles to meters
+            elevationGainMeters: hikeElevationGain / 3.28084 // feet to meters
+          });
+        } catch (err) {
+          console.error('Failed to save active hike metadata:', err);
+        }
+      };
+      saveMetadata();
+    }
+  }, [isHiking, activeHike, recoveredHike, hikeDistance, hikeElevationGain]);
+
+  // ── Sync Map Rotation Mode with DOM dataset to prevent orientation stale closures
+  useEffect(() => {
+    document.documentElement.dataset.rotationMode = mapRotationMode;
+    if (mapRotationMode === 'north' && mapRef.current) {
+      try {
+        mapRef.current.setBearing(0); // Reset map rotation
+      } catch {}
+    }
+  }, [mapRotationMode]);
+
   // ── Watch live GPS location
   useEffect(() => {
     if (!navigator.geolocation) return;
     const watchId = navigator.geolocation.watchPosition(
-      (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      (err) => console.log('GPS error', err),
-      { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
+      (pos) => {
+        const { accuracy } = pos.coords;
+        if (accuracy <= 20) {
+          setGpsStatus('Good');
+        } else if (accuracy <= 80) {
+          setGpsStatus('Weak');
+        } else {
+          setGpsStatus('Poor');
+        }
+
+        setUserLocation({ 
+          lat: pos.coords.latitude, 
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+          elevation: pos.coords.altitude,
+          heading: pos.coords.heading,
+          speed: pos.coords.speed,
+          timestamp: pos.timestamp
+        });
+      },
+      (err) => {
+        if (err.code === 1) {
+          setGpsStatus('Denied');
+        } else {
+          setGpsStatus('Unavailable');
+        }
+        console.log('GPS error', err);
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
     );
     return () => navigator.geolocation.clearWatch(watchId);
+  }, []);
+
+  // ── Request Persistent Storage
+  useEffect(() => {
+    const requestPersist = async () => {
+      if (navigator.storage && navigator.storage.persist) {
+        const persisted = await navigator.storage.persist();
+        console.log('Persistent storage status:', persisted);
+      }
+    };
+    requestPersist();
+  }, []);
+
+  // ── Watch Device Orientation (Compass)
+  useEffect(() => {
+    const handleOrientation = (e) => {
+      const heading = e.webkitCompassHeading !== undefined ? e.webkitCompassHeading : (360 - e.alpha);
+      setDeviceHeading(heading);
+      setHikeHeading(heading);
+
+      // Rotate map bearing if Compass-Up is enabled
+      const isCompassMode = document.documentElement.dataset.rotationMode === 'compass';
+      if (isCompassMode && mapRef.current) {
+        try {
+          mapRef.current.setBearing(heading);
+        } catch {}
+      }
+    };
+
+    window.addEventListener('deviceorientation', handleOrientation);
+    window.addEventListener('deviceorientationabsolute', handleOrientation);
+
+    return () => {
+      window.removeEventListener('deviceorientation', handleOrientation);
+      window.removeEventListener('deviceorientationabsolute', handleOrientation);
+    };
   }, []);
 
   // ── Load preferences
@@ -887,6 +1378,48 @@ function HikeSearchContent() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (saved) { try { setPreferences(JSON.parse(saved)); } catch {} }
   }, []);
+
+  // ── Background Preloading of Hikes Near Me
+  useEffect(() => {
+    if (isOffline || !userLocation || status !== 'idle' || searchQuery !== '') return;
+
+    const currentKey = `${userLocation.lat}|${userLocation.lng}|${JSON.stringify(preferences)}|${searchRadius}|${priceRange || 'null'}|${groupMode ? groupDescription : ''}`;
+    
+    if (preloadedKey === currentKey || isPreloading) return;
+
+    const preload = async () => {
+      setIsPreloading(true);
+      try {
+        const locName = (await getLocationName(userLocation.lat, userLocation.lng)) || `${userLocation.lat.toFixed(3)}, ${userLocation.lng.toFixed(3)}`;
+        const res = await fetch('/api/smart-search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lat: userLocation.lat,
+            lng: userLocation.lng,
+            locationName: locName,
+            naturalLanguageQuery: '',
+            preferences,
+            groupDescription: groupMode ? groupDescription : null,
+            forceMode: searchMode || null,
+            radius: searchRadius,
+            priceRange: priceRange || null,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setPreloadedData({ data, locName });
+          setPreloadedKey(currentKey);
+        }
+      } catch (e) {
+        console.warn('Preload failed', e);
+      } finally {
+        setIsPreloading(false);
+      }
+    };
+
+    preload();
+  }, [userLocation, preferences, searchRadius, priceRange, groupMode, groupDescription, isOffline, status, searchQuery, preloadedKey, isPreloading, searchMode]);
 
   const fitAllTrails = useCallback(() => {
     if (!mapRef.current || trails.length === 0) {
@@ -922,12 +1455,13 @@ function HikeSearchContent() {
     }
   }, [trails, status, userLocation]);
 
-  const getLocation = () =>
-    new Promise((res, rej) =>
+  function getLocation() {
+    return new Promise((res, rej) =>
       navigator.geolocation.getCurrentPosition(res, rej, { timeout: 10000 })
     );
+  }
 
-  const getLocationName = async (lat, lng) => {
+  async function getLocationName(lat, lng) {
     try {
       const r = await fetch(
         `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`
@@ -941,7 +1475,7 @@ function HikeSearchContent() {
       }
     } catch {}
     return null;
-  };
+  }
 
   const runSearch = useCallback(
     async (forceMode = null) => {
@@ -958,6 +1492,37 @@ function HikeSearchContent() {
         const { latitude: lat, longitude: lng } = pos.coords;
         setUserLocation({ lat, lng });
         setMapCenter({ lat, lng });
+
+        // Check if we have matching preloaded data
+        let usePreload = false;
+        if (searchQuery === '' && preloadedData && preloadedKey) {
+          const keyParts = preloadedKey.split('|');
+          const [pLat, pLng, pPrefs, pRadius, pPrice, pGroup] = keyParts;
+          const latDiff = Math.abs(lat - parseFloat(pLat));
+          const lngDiff = Math.abs(lng - parseFloat(pLng));
+          const currentPrefs = JSON.stringify(preferences);
+          
+          if (
+            latDiff < 0.002 && 
+            lngDiff < 0.002 && 
+            pPrefs === currentPrefs && 
+            pRadius === String(searchRadius) && 
+            pPrice === String(priceRange || 'null') && 
+            pGroup === (groupMode ? groupDescription : '')
+          ) {
+            usePreload = true;
+          }
+        }
+
+        if (usePreload) {
+          const { data, locName: pLocName } = preloadedData;
+          setLocationName(pLocName);
+          setTrails(data.trails || []);
+          setWeather(data.weather || null);
+          setSource(data.source || 'fast');
+          setStatus('done');
+          return;
+        }
 
         const locName = (await getLocationName(lat, lng)) || `${lat.toFixed(3)}, ${lng.toFixed(3)}`;
         setLocationName(locName);
@@ -976,6 +1541,7 @@ function HikeSearchContent() {
             groupDescription: groupMode ? groupDescription : null,
             forceMode: forceMode || searchMode || null,
             radius: searchRadius,
+            priceRange: priceRange || null,
           }),
         });
         
@@ -999,7 +1565,7 @@ function HikeSearchContent() {
         setStatus('error');
       }
     },
-    [searchQuery, searchMode, preferences, groupMode, groupDescription, searchRadius]
+    [searchQuery, searchMode, preferences, groupMode, groupDescription, searchRadius, preloadedData, preloadedKey, priceRange]
   );
 
   // Session Storage Caching
@@ -1058,56 +1624,230 @@ function HikeSearchContent() {
     }
   };
 
-  const startHike = (trail) => {
+  const startHike = (trail, isRestored = false, isRestoredPaused = false) => {
     setIsHiking(true);
+    setIsPaused(isRestored ? isRestoredPaused : false);
     setActiveHike(trail);
-    setHikeDistance(0);
-    setHikeDuration(0);
-    setHikeElevationGain(0);
-    setHikeSpeed(0);
-    lastLocRef.current = null;
+    document.documentElement.dataset.paused = (isRestored ? isRestoredPaused : false) ? 'true' : 'false';
 
+    const now = Date.now();
+
+    if (!isRestored) {
+      const newHikeId = `hike-${now}`;
+      const record = {
+        id: newHikeId,
+        name: trail.name,
+        status: 'active',
+        startedAt: now,
+        pausedAt: null,
+        totalPausedMs: 0,
+        distanceMeters: 0,
+        elevationGainMeters: 0
+      };
+      
+      // Save pointers in state & DB
+      db.activeHikes.put(record).catch(err => console.error('DB put failed:', err));
+      setRecoveredHike(record);
+
+      hikeTimingsRef.current = { startedAt: now, totalPausedMs: 0, pausedAt: null };
+      setHikeDistance(0);
+      setHikeDuration(0);
+      setHikeElevationGain(0);
+      setHikeSpeed(0);
+      setHikeHeading(null);
+      setHikePath([]);
+      setRawPath([]);
+      setAltitudeHistory([]);
+      lastLocRef.current = null;
+    }
+
+    // Start silent audio loop to keep GPS background worker alive
+    audioRef.current = startBackgroundAudio();
+    requestWakeLock();
+
+    // Timestamp-based duration timer (eliminates drift from tab sleep)
     timerRef.current = setInterval(() => {
-      setHikeDuration(prev => prev + 1);
+      const tNow = Date.now();
+      const start = hikeTimingsRef.current.startedAt;
+      const totalPaused = hikeTimingsRef.current.totalPausedMs;
+      const currentPause = hikeTimingsRef.current.pausedAt ? (tNow - hikeTimingsRef.current.pausedAt) : 0;
+      const elapsed = Math.floor((tNow - start - totalPaused - currentPause) / 1000);
+      setHikeDuration(Math.max(0, elapsed));
     }, 1000);
 
     if ('geolocation' in navigator) {
       watchIdRef.current = navigator.geolocation.watchPosition(
         (pos) => {
-          const { latitude, longitude, altitude, speed } = pos.coords;
-          setUserLocation({ lat: latitude, lng: longitude });
-          setMapCenter({ lat: latitude, lng: longitude });
-          mapRef.current?.flyTo({ center: [longitude, latitude], zoom: 16 });
+          // If paused, we don't accumulate stats or follow location
+          const isCurrentlyPaused = document.documentElement.dataset.paused === 'true';
+          if (isCurrentlyPaused) return;
 
+          const { latitude, longitude, altitude, speed, heading, accuracy, altitudeAccuracy } = pos.coords;
+
+          // 1. Log to rawPath representation
+          setRawPath(prev => [...prev, [longitude, latitude]]);
+
+          let isAccepted = true;
+          let rejectionReason = null;
+
+          // 2. Accuracy Tiers validation
+          if (accuracy && accuracy > 40) {
+            // Display location using dot but do not add to distance calculations
+            isAccepted = false;
+            rejectionReason = 'low_accuracy';
+          }
+
+          let distanceMoved = 0;
+          let elapsedSeconds = 0;
           if (lastLocRef.current) {
-            const dist = distanceMiles(lastLocRef.current.lat, lastLocRef.current.lng, latitude, longitude);
-            setHikeDistance(prev => prev + dist);
-            
-            if (altitude && lastLocRef.current.altitude) {
-              const diff = altitude - lastLocRef.current.altitude;
-              if (diff > 0) {
-                // Convert meters to feet
-                setHikeElevationGain(prev => prev + (diff * 3.28084));
+            distanceMoved = distanceMiles(lastLocRef.current.lat, lastLocRef.current.lng, latitude, longitude) * 1609.344; // in meters
+            elapsedSeconds = (pos.timestamp - lastLocRef.current.timestamp) / 1000;
+
+            // 3. Unrealistic Jump filter (rejects coordinate jumps > 43 km/h / 12 m/s)
+            if (elapsedSeconds > 0) {
+              const impliedSpeed = distanceMoved / elapsedSeconds;
+              if (impliedSpeed > 12) {
+                isAccepted = false;
+                rejectionReason = 'unrealistic_jump';
               }
             }
           }
-          
-          if (speed !== null) {
-            // Convert m/s to mph
-            setHikeSpeed(speed * 2.23694);
+
+          // 4. Dynamic Movement Threshold
+          const prevAccuracy = lastLocRef.current?.accuracy || accuracy || 10;
+          const movementThreshold = Math.max(5, prevAccuracy * 0.35, accuracy * 0.35); // meters
+
+          // 5. Stationary Check
+          // Restricting stationary drift checks to frequent updates (elapsedSeconds < 20)
+          // so resume jumps are not misclassified as standing still.
+          const likelyStationary = distanceMoved < movementThreshold &&
+            elapsedSeconds < 20 &&
+            (speed == null || speed < 0.15);
+
+          if (likelyStationary) {
+            isAccepted = false;
+            rejectionReason = 'stationary_drift';
           }
 
-          lastLocRef.current = { lat: latitude, lng: longitude, altitude };
+          // 6. Log point record to IndexedDB
+          const currentRecord = recoveredHike || { id: `hike-${hikeTimingsRef.current.startedAt}` };
+          db.activeHikePoints.put({
+            hikeId: currentRecord.id,
+            latitude,
+            longitude,
+            altitude,
+            accuracy,
+            altitudeAccuracy,
+            heading,
+            speed,
+            timestamp: pos.timestamp,
+            accepted: isAccepted,
+            rejectionReason
+          }).catch(err => console.error('Failed to record point:', err));
+
+          // 7. Update live tracking stats if accepted
+          if (isAccepted) {
+            if (lastLocRef.current) {
+              const distMilesVal = distanceMoved / 1609.344;
+              setHikeDistance(prev => prev + distMilesVal);
+
+              // 8. Altitude Smoothing & Climb Gain Thresholds
+              if (altitude !== null) {
+                // Falling back to 10 points smoothing + 5 meters threshold if altitudeAccuracy is null
+                const hasAltAcc = altitudeAccuracy !== null && altitudeAccuracy !== undefined;
+                if (!hasAltAcc || altitudeAccuracy <= 15) {
+                  const windowSize = hasAltAcc ? 5 : 10;
+                  const newHistory = [...altitudeHistory, altitude].slice(-windowSize);
+                  setAltitudeHistory(newHistory);
+
+                  const avgAlt = newHistory.reduce((a, b) => a + b, 0) / newHistory.length;
+
+                  if (lastLocRef.current.avgAlt) {
+                    const diffAlt = avgAlt - lastLocRef.current.avgAlt;
+                    const climbThreshold = hasAltAcc ? 3 : 5; // meters
+                    if (diffAlt >= climbThreshold) {
+                      setHikeElevationGain(prev => prev + (diffAlt * 3.28084)); // meters to feet
+                    }
+                  }
+                  lastLocRef.current.avgAlt = avgAlt;
+                }
+              }
+            }
+
+            setHikePath(prev => [...prev, [longitude, latitude]]);
+            
+            lastLocRef.current = { 
+              lat: latitude, 
+              lng: longitude, 
+              altitude, 
+              accuracy, 
+              timestamp: pos.timestamp,
+              avgAlt: lastLocRef.current?.avgAlt
+            };
+
+            if (speed !== null) {
+              setHikeSpeed(speed * 2.23694); // m/s to mph
+            }
+            if (heading !== null) {
+              setHikeHeading(heading);
+            }
+          }
+
+          // Always update dot location circle
+          setUserLocation({ 
+            lat: latitude, 
+            lng: longitude,
+            accuracy,
+            elevation: altitude,
+            heading,
+            speed,
+            timestamp: pos.timestamp
+          });
+
+          if (accuracy <= 20) {
+            setGpsStatus('Good');
+          } else if (accuracy <= 80) {
+            setGpsStatus('Weak');
+          } else {
+            setGpsStatus('Poor');
+          }
+
+          setMapCenter({ lat: latitude, lng: longitude });
+          mapRef.current?.flyTo({ center: [longitude, latitude], zoom: 16 });
         },
-        (err) => console.error(err),
-        { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
+        (err) => {
+          if (err.code === 1) {
+            setGpsStatus('Denied');
+          } else {
+            setGpsStatus('Unavailable');
+          }
+          console.error(err);
+        },
+        // Enforce maximum GPS accuracy and bypass local browser location caches
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
       );
     }
   };
 
-  const stopHike = () => {
+  const stopHike = async () => {
     setIsHiking(false);
+    setIsPaused(false);
     setActiveHike(null);
+    setHikePath([]);
+    setRawPath([]);
+    document.documentElement.dataset.paused = 'false';
+    releaseWakeLock();
+
+    if (recoveredHike) {
+      try {
+        await db.activeHikes.delete(recoveredHike.id);
+        await db.activeHikePoints.where('hikeId').equals(recoveredHike.id).delete();
+      } catch (err) {
+        console.error('Failed to delete active records:', err);
+      }
+    }
+    setRecoveredHike(null);
+
     if (watchIdRef.current) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
@@ -1116,6 +1856,54 @@ function HikeSearchContent() {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
+    // Stop background keep-alive audio
+    if (audioRef.current) {
+      try { audioRef.current.pause(); } catch {}
+      audioRef.current = null;
+    }
+  };
+
+  const togglePause = () => {
+    setIsPaused(prev => {
+      const nextPaused = !prev;
+      document.documentElement.dataset.paused = nextPaused ? 'true' : 'false';
+      const now = Date.now();
+
+      if (nextPaused) {
+        hikeTimingsRef.current.pausedAt = now;
+        releaseWakeLock();
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+          timerRef.current = null;
+        }
+        if (audioRef.current) {
+          try { audioRef.current.pause(); } catch {}
+        }
+      } else {
+        if (hikeTimingsRef.current.pausedAt) {
+          const pausedDuration = now - hikeTimingsRef.current.pausedAt;
+          hikeTimingsRef.current.totalPausedMs += pausedDuration;
+          hikeTimingsRef.current.pausedAt = null;
+        }
+        requestWakeLock();
+
+        // Resume timer
+        timerRef.current = setInterval(() => {
+          const tNow = Date.now();
+          const start = hikeTimingsRef.current.startedAt;
+          const totalPaused = hikeTimingsRef.current.totalPausedMs;
+          const currentPause = hikeTimingsRef.current.pausedAt ? (tNow - hikeTimingsRef.current.pausedAt) : 0;
+          const elapsed = Math.floor((tNow - start - totalPaused - currentPause) / 1000);
+          setHikeDuration(Math.max(0, elapsed));
+        }, 1000);
+
+        // Resume silent audio keep-alive
+        if (audioRef.current) {
+          try { audioRef.current.play().catch(() => {}); } catch {}
+        }
+      }
+      return nextPaused;
+    });
   };
 
   const loadMore = async () => {
@@ -1132,9 +1920,10 @@ function HikeSearchContent() {
           naturalLanguageQuery: searchQuery,
           preferences,
           groupDescription: groupMode ? groupDescription : null,
-          forceMode: source || searchMode || null,
+          forceMode: source,
           excludeNames: trails.map(t => t.name),
           radius: searchRadius,
+          priceRange: priceRange || null,
         }),
       });
 
@@ -1161,6 +1950,15 @@ function HikeSearchContent() {
 
   const handleRefine = async () => {
     if (!refineInput.trim() || isRefining) return;
+
+    // Intercept Safety Mode Triggers
+    const safetyKeywords = ['lost', 'injured', 'stranded', 'disoriented', 'unable to return', "i'm lost", "i am lost"];
+    if (safetyKeywords.some(keyword => refineInput.toLowerCase().includes(keyword))) {
+      setIsSafetyMode(true);
+      setRefineInput('');
+      return;
+    }
+
     const userMsg = { role: 'user', content: refineInput, display: refineInput };
     const nextConv = [...conversation, userMsg];
     setConversation(nextConv);
@@ -1206,9 +2004,83 @@ function HikeSearchContent() {
 
   return (
     <div className="flex flex-col h-screen bg-slate-900 font-sans overflow-hidden">
+ 
+      {/* ── Active Hike Recovery Modal ── */}
+      {showRecoveryModal && recoveredHike && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[999] flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 max-w-md w-full rounded-3xl p-6 shadow-2xl flex flex-col gap-4 text-center">
+            <div className="text-3xl">🧭</div>
+            <h3 className="text-white text-xl font-bold">Unfinished Hike Recovered</h3>
+            <p className="text-slate-400 text-sm">
+              An active tracking session for <span className="text-emerald-400 font-semibold">{recoveredHike.name}</span> from{' '}
+              <span className="text-slate-300 font-semibold">{new Date(recoveredHike.startedAt).toLocaleTimeString()}</span> was recovered.
+            </p>
+            <div className="text-xs text-slate-500 bg-slate-950/40 p-2.5 rounded-xl border border-slate-800 text-left flex flex-col gap-1">
+              <div>📍 Distance: <span className="text-slate-300">{(recoveredHike.distanceMeters / 1609.344).toFixed(2)} mi</span></div>
+              <div>🏔️ Elevation Gain: <span className="text-slate-300">{(recoveredHike.elevationGainMeters * 3.28084).toFixed(0)} ft</span></div>
+              <div>⏱️ Elapsed Duration: <span className="text-slate-300">{Math.floor(hikeDuration / 60)} min {hikeDuration % 60}s</span></div>
+            </div>
+            <div className="flex flex-col gap-2 mt-2">
+              <button 
+                onClick={() => {
+                  setShowRecoveryModal(false);
+                  startHike(recoveredHike, true, false); // Resume active
+                }} 
+                className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-2xl transition-colors"
+              >
+                Resume Tracking
+              </button>
+              <button 
+                onClick={() => {
+                  setShowRecoveryModal(false);
+                  startHike(recoveredHike, true, true); // Keep paused
+                }} 
+                className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-2.5 rounded-2xl transition-colors"
+              >
+                Keep Paused
+              </button>
+              <div className="flex gap-2">
+                <button 
+                  onClick={async () => {
+                    setShowRecoveryModal(false);
+                    // End and save
+                    await db.savedHikes.put({
+                      name: recoveredHike.name,
+                      lat: recoveredHike.lat || 0,
+                      lng: recoveredHike.lng || 0,
+                      savedAt: Date.now()
+                    });
+                    stopHike();
+                  }} 
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 rounded-2xl text-sm transition-colors"
+                >
+                  Save Hike
+                </button>
+                <button 
+                  onClick={() => {
+                    setShowRecoveryModal(false);
+                    stopHike(); // Discards and deletes active tables records
+                  }} 
+                  className="flex-1 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-900/30 text-rose-400 font-semibold py-2.5 rounded-2xl text-sm transition-colors"
+                >
+                  Discard
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Trail Chat drawer ── */}
-      <TrailChatDrawer trail={chatTrail} open={chatOpen} onClose={() => setChatOpen(false)} />
+      <TrailChatDrawer 
+        trail={chatTrail} 
+        open={chatOpen} 
+        onClose={() => setChatOpen(false)} 
+        onTriggerSafetyMode={() => {
+          setChatOpen(false);
+          setIsSafetyMode(true);
+        }}
+      />
 
       {/* ── Compare Drawer ── */}
       <AnimatePresence>
@@ -1267,6 +2139,12 @@ function HikeSearchContent() {
             ✨ Personalized
           </Link>
         )}
+        <button 
+          onClick={() => setIsSafetyMode(true)}
+          className="shrink-0 text-xs text-rose-400 bg-rose-950/40 border border-rose-500/30 px-3 py-1.5 rounded-full transition-colors hover:bg-rose-950/60 font-bold"
+        >
+          🆘 SOS / Lost?
+        </button>
         <Link href="/saved" className="shrink-0 text-xs text-emerald-400 bg-emerald-900/30 border border-emerald-500/30 px-3 py-1.5 rounded-full transition-colors hover:bg-emerald-900/50">
           💾 Saved
         </Link>
@@ -1285,6 +2163,11 @@ function HikeSearchContent() {
       {/* ── Map strip ── */}
       {(hasTrails || userLocation) && (
         <div className="shrink-0 h-[42vh] md:h-full md:w-1/2 relative z-10 border-b md:border-b-0 md:border-l border-slate-700 order-first md:order-last flex flex-col">
+          {weather && (
+             <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[400] w-11/12 max-w-sm pointer-events-none">
+               <EnvironmentalBanner weather={weather} />
+             </div>
+          )}
             <Map
               ref={mapRef}
               initialViewState={{
@@ -1296,7 +2179,25 @@ function HikeSearchContent() {
               style={{ width: '100%', height: '100%' }}
               onZoom={(e) => setMapZoom(e.viewState.zoom)}
             >
-              {userLocation && <UserPin position={userLocation} />}
+              {userLocation && <UserPin position={userLocation} heading={deviceHeading} />}
+
+              {/* Live Tracked Path */}
+              {isHiking && hikePath.length > 1 && (
+                <Source id="hike-track" type="geojson" data={{
+                  type: 'Feature',
+                  geometry: {
+                    type: 'LineString',
+                    coordinates: hikePath
+                  }
+                }}>
+                  <Layer
+                    id="hike-track-layer"
+                    type="line"
+                    layout={{ 'line-join': 'round', 'line-cap': 'round' }}
+                    paint={{ 'line-color': '#10b981', 'line-width': 4 }}
+                  />
+                </Source>
+              )}
 
               {trails.map((trail, i) =>
                 trail.lat && trail.lng ? (
@@ -1330,6 +2231,8 @@ function HikeSearchContent() {
                   index={selectedIdx}
                   onClose={() => setSelectedIdx(null)}
                   onScrollToCard={() => scrollToCard(selectedIdx)}
+                  onStartHike={startHike}
+                  downloadProgress={downloadProgress?.id === `${trails[selectedIdx].name}-${trails[selectedIdx].lat}` ? downloadProgress : null}
                 />
               )}
 
@@ -1337,6 +2240,17 @@ function HikeSearchContent() {
               <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col gap-1.5 z-10">
                   <button onClick={() => mapRef.current?.zoomTo(mapZoom + 1)} className="w-10 h-10 bg-slate-900/90 backdrop-blur border border-slate-600 rounded-xl text-white text-xl font-bold flex items-center justify-center shadow-lg hover:bg-slate-700 transition-colors">+</button>
                   <button onClick={() => mapRef.current?.zoomTo(mapZoom - 1)} className="w-10 h-10 bg-slate-900/90 backdrop-blur border border-slate-600 rounded-xl text-white text-xl font-bold flex items-center justify-center shadow-lg hover:bg-slate-700 transition-colors">−</button>
+                  <button 
+                    onClick={() => setMapRotationMode(prev => prev === 'north' ? 'compass' : 'north')}
+                    title={mapRotationMode === 'north' ? "Switch to Compass Up" : "Switch to North Up"}
+                    className={`w-10 h-10 backdrop-blur border rounded-xl text-base flex items-center justify-center shadow-lg transition-colors ${
+                      mapRotationMode === 'compass' 
+                        ? 'bg-indigo-600/90 border-indigo-400 text-white font-bold animate-pulse' 
+                        : 'bg-slate-900/90 border-slate-600 text-slate-300 hover:bg-slate-700'
+                    }`}
+                  >
+                    🧭
+                  </button>
                   {userLocation && (
                     <button onClick={() => { setMapCenter({ ...userLocation }); mapRef.current?.flyTo({ center: [userLocation.lng, userLocation.lat], zoom: 13 }); }} title="My location" className="w-10 h-10 bg-slate-900/90 backdrop-blur border border-slate-600 rounded-xl text-white text-base flex items-center justify-center shadow-lg hover:bg-slate-700 transition-colors">📍</button>
                   )}
@@ -1348,9 +2262,24 @@ function HikeSearchContent() {
 
           {/* Active Hike Overlay */}
           {isHiking && activeHike && (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-md text-white px-6 py-4 rounded-2xl border border-emerald-500 shadow-2xl flex flex-col items-center gap-3 z-50 min-w-[300px]">
-              <div className="text-emerald-400 font-bold uppercase tracking-wider text-xs">Active Hike</div>
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-slate-900/95 backdrop-blur-md text-white px-6 py-4 rounded-2xl border border-emerald-500 shadow-2xl flex flex-col items-center gap-3 z-50 min-w-[340px] max-w-[90%]">
+              <div className="flex w-full justify-between items-center px-1">
+                <span className="text-emerald-400 font-bold uppercase tracking-wider text-xs">Active Hike</span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                  gpsStatus === 'Good' ? 'bg-emerald-950/60 border-emerald-700 text-emerald-400' :
+                  gpsStatus === 'Weak' ? 'bg-amber-950/60 border-amber-700 text-amber-400' :
+                  gpsStatus === 'Poor' ? 'bg-rose-950/60 border-rose-700 text-rose-400' :
+                  'bg-indigo-950/60 border-indigo-700 text-indigo-400'
+                }`}>
+                  {gpsStatus === 'Good' ? '🟢 Good GPS' :
+                   gpsStatus === 'Weak' ? '🟡 Weak GPS' :
+                   gpsStatus === 'Poor' ? '🔴 Poor GPS' :
+                   gpsStatus === 'Denied' ? '🚫 GPS Denied' :
+                   '🔵 Acquiring GPS...'}
+                </span>
+              </div>
               <div className="font-semibold text-lg text-center leading-tight">{activeHike.name}</div>
+              
               <div className="flex gap-4 text-sm text-slate-300 w-full justify-between px-2">
                 <div className="flex flex-col items-center">
                   <span className="text-xl">{hikeDistance.toFixed(2)}</span>
@@ -1370,13 +2299,40 @@ function HikeSearchContent() {
                 </div>
                 <div className="w-px bg-slate-700"></div>
                 <div className="flex flex-col items-center">
-                  <span className="text-xl">{hikeSpeed.toFixed(1)}</span>
-                  <span className="text-[10px] text-slate-400 uppercase tracking-wide">MPH</span>
+                  <span className="text-xl">
+                    {hikeDistance > 0 ? ((hikeDuration / 60) / hikeDistance).toFixed(1) : '0.0'}
+                  </span>
+                  <span className="text-[10px] text-slate-400 uppercase tracking-wide">Min/Mi</span>
+                </div>
+                <div className="w-px bg-slate-700"></div>
+                <div className="flex flex-col items-center">
+                  <span className="text-xl">{hikeHeading !== null ? `${Math.round(hikeHeading)}°` : '--'}</span>
+                  <span className="text-[10px] text-slate-400 uppercase tracking-wide">Heading</span>
                 </div>
               </div>
-              <button onClick={stopHike} className="mt-1 w-full bg-rose-600 hover:bg-rose-500 text-white text-sm font-bold py-2 rounded-xl transition-colors">
-                Stop Hike
-              </button>
+
+              {/* Advisory warnings for battery/background limitations */}
+              <div className="w-full text-[10px] text-slate-400 bg-slate-950/40 border border-slate-800 p-2 rounded-xl flex flex-col gap-0.5 text-center leading-normal">
+                <div>🔋 High-accuracy GPS uses extra battery. Keep charger handy.</div>
+                <div>⚠️ Lock screen or backgrounding can suspend web GPS tracking. Keep screen awake.</div>
+              </div>
+
+              <div className="flex w-full gap-2 mt-1">
+                <button 
+                  onClick={togglePause} 
+                  className={`flex-1 text-sm font-bold py-2 rounded-xl transition-colors ${
+                    isPaused ? 'bg-amber-600 hover:bg-amber-500 text-white' : 'bg-slate-700 hover:bg-slate-600 text-white'
+                  }`}
+                >
+                  {isPaused ? '▶ Resume' : '⏸ Pause'}
+                </button>
+                <button 
+                  onClick={stopHike} 
+                  className="flex-1 bg-rose-600 hover:bg-rose-500 text-white text-sm font-bold py-2 rounded-xl transition-colors"
+                >
+                  Stop Hike
+                </button>
+              </div>
             </div>
           )}
 
@@ -1390,8 +2346,15 @@ function HikeSearchContent() {
       )}
 
       {/* ── Scrollable results / idle ── */}
-      <div className="flex-1 md:w-1/2 overflow-y-auto bg-slate-900 relative z-20 flex flex-col min-h-0">
-        {weather && <EnvironmentalBanner weather={weather} />}
+      <div className="flex-1 md:w-1/2 overflow-y-auto bg-slate-900 relative z-20 flex flex-col min-h-0 p-4">
+        {isSafetyMode ? (
+          <SafetyPanel 
+            userLocation={userLocation} 
+            isOffline={isOffline} 
+            onClose={() => setIsSafetyMode(false)} 
+          />
+        ) : (
+          <>
 
         {/* Loading states */}
         {status === 'locating' && (
@@ -1402,12 +2365,10 @@ function HikeSearchContent() {
         )}
 
         {status === 'searching' && (
-          <div className="flex flex-col items-center justify-center py-20 gap-4">
-            <div className={`w-10 h-10 rounded-full border-4 border-t-transparent animate-spin ${source === 'ai' ? 'border-indigo-400' : 'border-amber-400'}`} />
-            <p className="text-slate-300 font-medium">
-              {source === 'ai' ? '🤖 Claude is finding your perfect trails…' : '⚡ Quick search in progress…'}
-            </p>
-            {source === 'ai' && <p className="text-slate-500 text-sm text-center max-w-xs px-4">Matching your personality, preferences, and today&apos;s weather</p>}
+          <div className="flex flex-col gap-4 p-4 mt-2">
+            <SkeletonTrailCard />
+            <SkeletonTrailCard />
+            <SkeletonTrailCard />
           </div>
         )}
 
@@ -1426,26 +2387,18 @@ function HikeSearchContent() {
 
             {/* Source badge + upgrade CTA */}
             <div className="flex justify-between px-4 pt-4">
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  {source === 'ai' && (
-                    <span className="text-xs font-semibold px-3 py-1.5 rounded-full border bg-indigo-900/40 border-indigo-500/40 text-indigo-300">
-                      🤖 AI-Personalized
-                    </span>
-                  )}
-                  {source === 'fast' && (
-                    <button onClick={() => runSearch('ai')} className="text-xs text-indigo-400 underline hover:text-indigo-300 transition-colors">
-                      Personalize with AI →
-                    </button>
-                  )}
-                </div>
+              <div className="flex flex-col gap-2 w-full">
                 {source === 'ai' && (
-                  <p className="text-xs text-slate-400 mt-1 max-w-[280px]">
-                    These hikes are based on your personalized profile. To change your preferences, <Link href="/personalize" className="text-indigo-400 underline hover:text-indigo-300">go to personalize</Link>.
-                  </p>
+                  <div className="truncate text-xs text-slate-400">
+                    Depending on your personalized profile, we have selected these {searchQuery.toLowerCase().includes('food') ? 'food options' : 'trails'} to best match your preferences.
+                  </div>
+                )}
+                {source === 'fast' && (
+                  <button onClick={() => runSearch('ai')} className="text-xs text-indigo-400 underline hover:text-indigo-300 transition-colors w-fit">
+                    Personalize with AI →
+                  </button>
                 )}
               </div>
-              <p className="text-slate-500 text-xs shrink-0 mt-1.5">{trails.length} found</p>
             </div>
 
             {/* Active preference chips (AI mode only) */}
@@ -1495,6 +2448,7 @@ function HikeSearchContent() {
                     onCompareToggle={toggleCompare}
                     isComparing={compareList.some(ct => ct.name === trail.name)}
                     onStartHike={startHike}
+                    downloadProgress={downloadProgress?.id === `${trail.name}-${trail.lat}` ? downloadProgress : null}
                   />
                 ) : (
                   <FastTrailCard
@@ -1507,6 +2461,7 @@ function HikeSearchContent() {
                     onSave={handleSaveHike}
                     isSaved={savedIds.has(`${trail.name}-${trail.lat}`)}
                     onStartHike={startHike}
+                    downloadProgress={downloadProgress?.id === `${trail.name}-${trail.lat}` ? downloadProgress : null}
                   />
                 )
               )}
@@ -1595,39 +2550,57 @@ function HikeSearchContent() {
             </div>
 
             {/* Manual mode override & Radius */}
-            <div className="flex flex-col sm:flex-row gap-6">
-              <div className="flex-1">
-                <p className="text-slate-500 text-xs mb-2">Search mode</p>
-                <div className="flex gap-2">
-                  {[
-                    [null, '🎯 Auto'],
-                    ['ai', '🤖 Always AI'],
-                    ['fast', '⚡ Always Quick'],
-                  ].map(([mode, label]) => (
-                    <button
-                      key={String(mode)}
-                      onClick={() => setSearchMode(mode)}
-                      className={`flex-1 text-xs py-2 rounded-xl border transition-all font-medium ${
-                        searchMode === mode ? 'bg-slate-600 border-slate-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
+            <div className="flex flex-col gap-6">
+              <div className="flex flex-col sm:flex-row gap-6">
+                <div className="flex-1">
+                  <p className="text-slate-500 text-xs mb-2">Search mode</p>
+                  <div className="flex gap-2">
+                    {[
+                      [null, '🎯 Auto'],
+                      ['ai', '🤖 Always AI'],
+                      ['fast', '⚡ Always Quick'],
+                    ].map(([mode, label]) => (
+                      <button
+                        key={String(mode)}
+                        onClick={() => setSearchMode(mode)}
+                        className={`flex-1 text-xs py-2 rounded-xl border transition-all font-medium ${
+                          searchMode === mode ? 'bg-slate-600 border-slate-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <p className="text-slate-500 text-xs mb-2">Radius</p>
+                  <div className="flex gap-2">
+                    {[5, 15, 25, 50].map((r) => (
+                      <button
+                        key={r}
+                        onClick={() => setSearchRadius(r)}
+                        className={`flex-1 text-xs py-2 rounded-xl border transition-all font-medium ${
+                          searchRadius === r ? 'bg-slate-600 border-slate-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
+                        }`}
+                      >
+                        {r} mi
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
-              <div className="flex-1">
-                <p className="text-slate-500 text-xs mb-2">Radius</p>
+              <div>
+                <p className="text-slate-500 text-xs mb-2">Price (Food)</p>
                 <div className="flex gap-2">
-                  {[5, 15, 25, 50].map((r) => (
+                  {['', 'Under $10', '$10 - $15', '$15 - $25', 'Over $25'].map((p) => (
                     <button
-                      key={r}
-                      onClick={() => setSearchRadius(r)}
+                      key={p}
+                      onClick={() => setPriceRange(p)}
                       className={`flex-1 text-xs py-2 rounded-xl border transition-all font-medium ${
-                        searchRadius === r ? 'bg-slate-600 border-slate-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
+                        priceRange === p ? 'bg-slate-600 border-slate-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
                       }`}
                     >
-                      {r} mi
+                      {p === '' ? 'Any' : p}
                     </button>
                   ))}
                 </div>
@@ -1664,6 +2637,8 @@ function HikeSearchContent() {
               {isOffline ? 'Offline - Connect to search' : 'Find Hikes Near Me →'}
             </button>
           </div>
+        )}
+        </>
         )}
       </div>
 

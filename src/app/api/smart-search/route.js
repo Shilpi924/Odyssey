@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { StateGraph, END, START } from '@langchain/langgraph';
 import Anthropic from '@anthropic-ai/sdk';
+import { db } from '../../../lib/pg';
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -14,23 +15,69 @@ function distanceMiles(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function generateMockRoute(centerLat, centerLng) {
-  const points = [];
-  const radius = 0.01; // roughly 1km
-  for (let i = 0; i <= 20; i++) {
-    const angle = (i / 20) * Math.PI * 2;
-    // adding some noise for realistic looking path
-    const r = radius * (0.8 + Math.random() * 0.4); 
-    const lat = centerLat + r * Math.sin(angle);
-    const lng = centerLng + r * Math.cos(angle);
-    points.push([lng, lat]); // GeoJSON is [lng, lat]
+async function fetchRealRoute(centerLat, centerLng, trailId) {
+  // 1. Try to hit PostgreSQL Cache if available
+  if (db && trailId) {
+    try {
+      const res = await db.query(
+        'SELECT ST_AsGeoJSON(geom) as geom_json FROM trails WHERE id = $1',
+        [trailId]
+      );
+        
+      if (res.rows.length > 0 && res.rows[0].geom_json) {
+        return {
+          type: "Feature",
+          geometry: JSON.parse(res.rows[0].geom_json)
+        };
+      }
+    } catch (e) {
+      console.warn('Postgres cache miss/error:', e.message);
+    }
   }
+
+  // 2. Query Overpass for a path/track within ~1000m of the given point
+  const query = `[out:json];way(around:1000,${centerLat},${centerLng})[highway~"path|track|footway"];out geom;`;
+  const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+  
+  let geometryToReturn = {
+    type: "LineString",
+    coordinates: [[centerLng, centerLat]]
+  };
+
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
+    const data = await res.json();
+    
+    // Find the first way with geometry
+    const way = data.elements?.find(e => e.type === 'way' && e.geometry?.length > 0);
+    if (way) {
+      geometryToReturn = {
+        type: "LineString",
+        coordinates: way.geometry.map(pt => [pt.lon, pt.lat])
+      };
+    }
+  } catch (error) {
+    console.warn(`Overpass API failed for ${centerLat},${centerLng}`, error.message);
+    geometryToReturn = { type: "Point", coordinates: [centerLng, centerLat] };
+  }
+
+  // 3. Save to Postgres Cache
+  if (db && trailId) {
+    try {
+      await db.query(
+        `INSERT INTO trails (id, lat, lng, geom) 
+         VALUES ($1, $2, $3, ST_SetSRID(ST_GeomFromGeoJSON($4), 4326)) 
+         ON CONFLICT (id) DO UPDATE SET geom = EXCLUDED.geom`,
+        [trailId, centerLat, centerLng, JSON.stringify(geometryToReturn)]
+      );
+    } catch (e) {
+      console.warn('Failed to insert into Postgres cache:', e.message);
+    }
+  }
+
   return {
     type: "Feature",
-    geometry: {
-      type: "LineString",
-      coordinates: points
-    }
+    geometry: geometryToReturn
   };
 }
 
@@ -189,6 +236,7 @@ async function fastSearchNode(state) {
 
   let trails = (data.results || [])
     .filter((place) => !(state.excludeNames || []).includes(place.name))
+    .slice(0, 10)
     .map((place) => {
       const pLat = place.geometry.location.lat;
       const pLng = place.geometry.location.lng;
@@ -205,13 +253,21 @@ async function fastSearchNode(state) {
         placeId: place.place_id,
         photoRef: place.photos?.[0]?.photo_reference || null,
         source: 'google_places',
-        route: generateMockRoute(pLat, pLng),
         difficulty: null, length: null, elevationGain: null, features: [], why: null, tip: null, bestTime: null, parkingNote: null, weatherNote: null, sparkline: [0,0,0,0,0,0],
       };
     });
 
+  // Filter for safety: ensure we only suggest reasonably established trails if user asked for hikes
+  if (keyword.includes('hiking') || keyword.includes('trail')) {
+    trails = trails.filter(t => t.rating && t.rating >= 4.0 && t.userRatingsTotal > 5);
+  }
+
+  // Fetch real routes in parallel
+  await Promise.all(trails.map(async (t) => {
+    t.route = await fetchRealRoute(t.lat, t.lng, t.placeId);
+  }));
+
   trails.sort((a, b) => a.distanceNum - b.distanceNum);
-  trails = trails.slice(0, 10);
 
   return { results: trails, source: 'fast' };
 }
@@ -224,11 +280,14 @@ async function aiSearchNode(state) {
   const loc = locationName || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
   const searchRadius = radius ? `${radius} miles` : '15 miles';
 
-  const target = query ? `recommendations matching "${query}"` : 'hiking trails and points of interest';
+  const target = query ? `recommendations strictly matching "${query}"` : 'hiking trails and points of interest';
 
   const systemPrompt = `You are an expert local travel guide with deep knowledge of trails, food, local communities, and what makes an experience personally meaningful.
 Suggest exactly 10 real, specific ${target} near the user's location (within ${searchRadius}) that best match their preferences, personality, current weather, and any natural language request. 
 CRITICAL: Analyze their profile and explicitly recommend places/activities that like-minded people with the exact same interests enjoy doing.
+CRITICAL: If the user searches for a specific cuisine, dietary restriction, or food type (e.g., "Indian vegetarian food"), YOU MUST ONLY return places that exactly match this requirement. Do not return unrelated options.
+CRITICAL: The nearest matching locations MUST appear first in your response array. Order them strictly by increasing distance from the user.
+${state.priceRange ? `CRITICAL: The user has requested a price range of ${state.priceRange}. Only return options that fit within this budget.` : ''}
 CRITICAL: If the user has a preferred difficulty, try to match it. HOWEVER, if their current query contradicts their preference (e.g., asking for "kid friendly" but profile says "Strenuous"), prioritize the query over the profile! In the "why" field, explicitly warn the user if you are suggesting a strenuous hike, or explain that you chose an easier hike for the kids despite their preference.
 ${state.excludeNames?.length ? `CRITICAL: The user wants MORE results. DO NOT return any of these previously suggested places: ${state.excludeNames.join(', ')}. Return up to 10 NEW places. If you can only find a few, return them. DO NOT apologize or add conversational text. ONLY return the JSON array.` : ''}
 
@@ -271,10 +330,22 @@ Weather advisory: ${adv}`;
   let trails = [];
   try { 
     trails = JSON.parse(raw); 
+    
+    // Safety Filter: Ensure high ratings for AI suggestions
+    trails = trails.filter(t => t.rating && t.rating >= 4.0);
+
     trails = trails.map(t => {
       const dist = distanceMiles(lat, lng, t.lat, t.lng);
-      return { ...t, distanceNum: dist, distance: `${dist.toFixed(1)} miles away`, route: generateMockRoute(t.lat, t.lng) };
+      return { ...t, distanceNum: dist, distance: `${dist.toFixed(1)} miles away` };
     });
+    
+    // Fetch real routes in parallel
+    await Promise.all(trails.map(async (t) => {
+      // Create a stable unique ID for AI suggested trails
+      const uniqueId = t.name.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Math.round(t.lat * 100);
+      t.route = await fetchRealRoute(t.lat, t.lng, uniqueId);
+    }));
+
     trails.sort((a, b) => a.distanceNum - b.distanceNum);
   } catch { /* ignore parse error for now */ }
 
@@ -294,6 +365,7 @@ const graphState = {
   forceMode: { value: (prev, next) => next ?? prev },
   excludeNames: { value: (prev, next) => next ?? prev },
   radius: { value: (prev, next) => next ?? prev },
+  priceRange: { value: (prev, next) => next ?? prev },
   
   // Output fields
   next: { value: (prev, next) => next ?? prev },
@@ -333,6 +405,7 @@ export async function POST(request) {
       forceMode: body.forceMode, // null | 'ai' | 'fast'
       excludeNames: body.excludeNames || [],
       radius: body.radius || 25,
+      priceRange: body.priceRange || null,
     });
 
     return NextResponse.json({
