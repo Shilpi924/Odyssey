@@ -2242,6 +2242,7 @@ function HikeSearchContent() {
               terrain={is3D ? { source: 'terrainSource', exaggeration: 1.5 } : undefined}
               mapStyle={OSM_STYLE}
               style={{ width: '100%', height: '100%' }}
+              minZoom={4}
               onZoom={(e) => setMapZoom(e.viewState.zoom)}
               onError={(e) => {
                 if (e.error?.message?.includes('404')) {
