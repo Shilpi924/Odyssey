@@ -1086,6 +1086,7 @@ function HikeSearchContent() {
   const [isOffline, setIsOffline] = useState(false);
   const [savedIds, setSavedIds] = useState(new Set());
   const [downloadProgress, setDownloadProgress] = useState(null);
+  const [showIosWarning, setShowIosWarning] = useState(false);
 
   const handleSaveHike = async (trail) => {
     try {
@@ -1843,6 +1844,36 @@ function HikeSearchContent() {
   const stopHike = async () => {
     setIsHiking(false);
     setIsPaused(false);
+    
+    // Trigger Background Sync fetch
+    if (activeHike) {
+      try {
+        const syncData = {
+          id: recoveredHike ? recoveredHike.id : `hike-${Date.now()}`,
+          userId: 'anonymous',
+          hikeName: activeHike.name || 'Unknown Hike',
+          distanceMeters: hikeDistance * 1609.34,
+          durationSeconds: hikeDuration,
+          elevationGainMeters: hikeElevationGain,
+          path: rawPath
+        };
+
+        fetch('/api/sync-hike', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(syncData)
+        }).catch(err => console.log('Hike sync deferred by Background Sync API'));
+
+        // Check iOS limitation
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        if (isIOS) {
+          setShowIosWarning(true);
+        }
+      } catch (e) {
+        console.error('Failed to dispatch hike sync', e);
+      }
+    }
+
     setActiveHike(null);
     setHikePath([]);
     setRawPath([]);
@@ -2400,6 +2431,24 @@ function HikeSearchContent() {
           />
         ) : (
           <>
+
+        {/* iOS Background Sync Warning */}
+        {showIosWarning && (
+          <div className="mx-4 mt-4 p-4 bg-amber-950/40 border border-amber-500/50 rounded-2xl flex flex-col gap-2">
+            <h3 className="text-amber-400 font-bold flex items-center gap-2">
+              ⚠️ iOS Offline Sync Notice
+            </h3>
+            <p className="text-sm text-amber-200/80">
+              Your hike log has been queued. Since you are on iOS, Apple strictly limits background execution. Your hike will automatically sync to the server the next time you open the app while connected to the internet.
+            </p>
+            <button 
+              onClick={() => setShowIosWarning(false)}
+              className="mt-2 text-xs font-bold text-amber-400 hover:text-amber-300 self-end"
+            >
+              DISMISS
+            </button>
+          </div>
+        )}
 
         {/* Loading states */}
         {status === 'locating' && (

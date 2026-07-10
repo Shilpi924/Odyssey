@@ -19,3 +19,15 @@ CREATE TABLE IF NOT EXISTS user_preferences (
   preferences JSONB NOT NULL,
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- 5. Create user hike logs table to store synced hikes
+CREATE TABLE IF NOT EXISTS user_hike_logs (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  hike_name TEXT NOT NULL,
+  distance_meters FLOAT NOT NULL,
+  duration_seconds INT NOT NULL,
+  elevation_gain_meters FLOAT NOT NULL,
+  gps_path GEOMETRY(LineString, 4326),
+  synced_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
