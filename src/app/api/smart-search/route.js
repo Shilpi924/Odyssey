@@ -310,48 +310,41 @@ async function aiSearchNode(state) {
 
   const target = query ? `recommendations strictly matching "${query}"` : 'hiking trails and points of interest';
 
-  const systemPrompt = `You are an expert local travel guide with deep knowledge of trails, food, local communities, and what makes an experience personally meaningful.
-Suggest exactly 10 real, specific ${target} near the user's location (within ${searchRadius}) that best match their preferences, personality, current weather, and any natural language request.
-CRITICAL: Analyze their profile and explicitly recommend places/activities that like-minded people with the exact same interests enjoy doing.
-CRITICAL: If the user searches for a specific cuisine, dietary restriction, or food type (e.g., "Indian vegetarian food"), YOU MUST ONLY return places that exactly match this requirement. Do not return unrelated options.
-CRITICAL: The nearest matching locations MUST appear first in your response array. Order them strictly by increasing distance from the user.
-${state.priceRange ? `CRITICAL: The user has requested a price range of ${state.priceRange}. Only return options that fit within this budget.` : ''}
-${isFoodQuery ? 'CRITICAL: This is a FOOD/DRINK search. ONLY return restaurants, cafes, coffee shops, or food establishments. DO NOT return hiking trails or outdoor activities.' : ''}
-${isHikingQuery ? 'CRITICAL: This is a HIKING search. ONLY return hiking trails, nature walks, or outdoor activities. DO NOT return restaurants or food establishments.' : ''}
-CRITICAL: If the user has a preferred difficulty, try to match it. HOWEVER, if their current query contradicts their preference (e.g., asking for "kid friendly" but profile says "Strenuous"), prioritize the query over the profile! In the "why" field, explicitly warn the user if you are suggesting a strenuous hike, or explain that you chose an easier hike for the kids despite their preference.
-${state.excludeNames?.length ? `CRITICAL: The user wants MORE results. DO NOT return any of these previously suggested places: ${state.excludeNames.join(', ')}. Return up to 10 NEW places. If you can only find a few, return them. DO NOT apologize or add conversational text. ONLY return the JSON array.` : ''}
+  const systemPrompt = `Expert local guide. Suggest 10 real ${target} near ${loc} (${searchRadius}mi) matching user preferences.
+CRITICAL: Order by distance (nearest first).
+CRITICAL: Match specific cuisine/dietary requests exactly.
+${state.priceRange ? `CRITICAL: Price range: ${state.priceRange}.` : ''}
+${isFoodQuery ? 'CRITICAL: Food/drink ONLY. No trails.' : ''}
+${isHikingQuery ? 'CRITICAL: Hiking/outdoor ONLY. No restaurants.' : ''}
+${state.excludeNames?.length ? `CRITICAL: Exclude: ${state.excludeNames.join(', ')}. Return NEW places only.` : ''}
 
-Return ONLY a JSON array of objects with these exact fields:
-- "name": string
-- "lat": number
-- "lng": number
-- "distance": string (e.g. "3.2 miles away")
-- "difficulty": "Easy" | "Moderate" | "Strenuous" | "Expert" | null (Use null if not a hike)
-- "length": string | null (Use null if not a hike)
-- "elevationGain": string | null (Use null if not a hike)
-- "features": string[] (e.g. Shaded, Sunny, Water, Summit, DogFriendly, Loop, Scenic, EasyParking, Wildflowers, Alpine, Food, Indoor, Social)
-- "why": string (2-3 sentences explaining WHY this matches them personally)
-- "tip": string
-- "bestTime": string
-- "parkingNote": string
-- "weatherNote": string | null (weather-specific advice based on conditions)
-- "sparkline": number[] (array of exactly 6 integers representing elevation profile shape, or [0,0,0,0,0,0] if not a hike)
-- "rating": number (e.g. 4.8)
-- "estimatedWeeklyVisitors": number (realistic estimate of weekly visitors, e.g. 1500)
+JSON format:
+{
+  "results": [{
+    "name": string,
+    "lat": number,
+    "lng": number,
+    "distance": string,
+    "difficulty": "Easy|Moderate|Strenuous|Expert|null",
+    "length": string|null,
+    "elevationGain": string|null,
+    "features": string[],
+    "why": string (personal match reason),
+    "tip": string,
+    "bestTime": string,
+    "parkingNote": string,
+    "weatherNote": string|null,
+    "sparkline": number[6],
+    "rating": number,
+    "estimatedWeeklyVisitors": number
+  }]
+}`;
 
-Respond ONLY with valid JSON.`;
+  const userMessage = `${query ? `Query: "${query}"` : 'Default: hiking trails'}${userContext ? `\n${userContext}` : ''}${groupDescription ? `\nGroup: ${groupDescription}` : ''}${weather ? `\nWeather: ${weather.temp}°F ${weather.condition}` : ''}\nAdvisory: ${adv}`;
 
-  const userMessage = `Find 10 ${target} near ${loc} (within ${searchRadius}).
-${userContext ? `\n${userContext}` : ''}
-${query ? `\nWhat I want: "${query}"` : ''}
-${groupDescription ? `\nGroup details: ${groupDescription}` : ''}
-${weather ? `\nCurrent weather: ${weather.temp}°F, ${weather.condition}` : ''}
-Weather advisory: ${adv}`;
-
-  // Using Opus (large reasoning model) for the deep personalization
   const message = await client.messages.create({
     model: 'claude-opus-4-5',
-    max_tokens: 3500,
+    max_tokens: 2500,
     system: systemPrompt,
     messages: [{ role: 'user', content: userMessage }],
   });
@@ -359,7 +352,8 @@ Weather advisory: ${adv}`;
   const raw = message.content[0].text.trim().replace(/^```json\s*/i, '').replace(/```\s*$/, '');
   let trails = [];
   try { 
-    trails = JSON.parse(raw); 
+    const parsed = JSON.parse(raw);
+    trails = parsed.results || parsed; // Handle both wrapped and unwrapped responses
     
     // Safety Filter: Ensure high ratings for AI suggestions
     trails = trails.filter(t => t.rating && t.rating >= 4.0);
@@ -377,7 +371,9 @@ Weather advisory: ${adv}`;
     }));
 
     trails.sort((a, b) => a.distanceNum - b.distanceNum);
-  } catch { /* ignore parse error for now */ }
+  } catch (e) {
+    console.error('AI parse error:', e.message);
+  }
 
   return { results: trails, source: 'ai', weather };
 }

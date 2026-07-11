@@ -9,6 +9,10 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { db } from '@/lib/db';
 import { downloadAreaTiles, deleteAreaTiles } from '@/lib/offline-maps';
 import { motion, AnimatePresence } from 'framer-motion';
+import TrailConditions from '@/components/features/TrailConditions';
+import PointsOfInterest from '@/components/features/PointsOfInterest';
+import Terrain3DPreview from '@/components/features/Terrain3DPreview';
+import PrintMaps from '@/components/features/PrintMaps';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -623,6 +627,24 @@ function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetView
           </div>
         )}
 
+        {/* Trail Conditions - only show in AI mode with weather */}
+        {weather && searchMode === 'ai' && (
+          <TrailConditions trail={trail} weather={weather} />
+        )}
+
+        {/* Points of Interest - only show in AI mode */}
+        {searchMode === 'ai' && (
+          <PointsOfInterest trail={trail} />
+        )}
+
+        {/* Terrain 3D Preview - only show in AI mode */}
+        {searchMode === 'ai' && (
+          <Terrain3DPreview trail={trail} />
+        )}
+
+        {/* Print Maps - show in both modes */}
+        <PrintMaps trail={trail} />
+
         {/* Actions */}
         <div className="flex gap-2 pt-1">
           <button
@@ -1028,7 +1050,7 @@ function HikeSearchContent() {
 
   // ── Search input state
   const [searchQuery, setSearchQuery] = useState(query && query !== 'hikes' ? query : '');
-  const [searchMode, setSearchMode] = useState(null); // null=auto | 'ai' | 'fast'
+  const [searchMode, setSearchMode] = useState('fast'); // 'fast' | 'ai' | 'auto'
   const [groupMode, setGroupMode] = useState(false);
   const [groupDescription, setGroupDescription] = useState('');
   const [searchRadius, setSearchRadius] = useState(25);
@@ -1566,26 +1588,38 @@ function HikeSearchContent() {
         setLocationName(locName);
         setStatus('searching');
 
-        // We always call smart-search, which uses LangGraph to route internally
-        const res = await fetch('/api/smart-search', {
+        // Use fast-search for default, smart-search for AI mode
+        const apiUrl = searchMode === 'ai' ? '/api/smart-search' : '/api/fast-search';
+        const body = searchMode === 'ai' 
+          ? {
+              lat,
+              lng,
+              locationName: locName,
+              naturalLanguageQuery: searchQuery,
+              preferences,
+              groupDescription: groupMode ? groupDescription : null,
+              forceMode: 'ai',
+              radius: searchRadius,
+              priceRange: priceRange || null,
+            }
+          : {
+              lat,
+              lng,
+              query: searchQuery,
+              preferences,
+              radius: searchRadius,
+              priceRange: priceRange || null,
+            };
+
+        const res = await fetch(apiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            lat,
-            lng,
-            locationName: locName,
-            naturalLanguageQuery: searchQuery,
-            preferences,
-            groupDescription: groupMode ? groupDescription : null,
-            forceMode: forceMode || searchMode || null,
-            radius: searchRadius,
-            priceRange: priceRange || null,
-          }),
+          body: JSON.stringify(body),
         });
         
         if (!res.ok) {
           const e = await res.json();
-          throw new Error(e.error || 'Smart search failed');
+          throw new Error(e.error || 'Search failed');
         }
         
         const data = await res.json();
@@ -2784,12 +2818,36 @@ function HikeSearchContent() {
               )}
             </div>
 
+            {/* Search Mode Toggle */}
+            <div className="flex items-center justify-center gap-3 mb-3">
+              <button
+                onClick={() => setSearchMode('fast')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  searchMode === 'fast'
+                    ? 'bg-emerald-500 text-white shadow-lg'
+                    : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                }`}
+              >
+                ⚡ Fast
+              </button>
+              <button
+                onClick={() => setSearchMode('ai')}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  searchMode === 'ai'
+                    ? 'bg-indigo-500 text-white shadow-lg'
+                    : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                }`}
+              >
+                🤖 AI Search
+              </button>
+            </div>
+
             <button
               onClick={() => runSearch()}
               disabled={isOffline}
               className="w-full py-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 disabled:from-slate-600 disabled:to-slate-700 text-white font-bold rounded-2xl shadow-lg transition-all duration-300 text-base"
             >
-              {isOffline ? 'Offline - Connect to search' : 'Find Hikes Near Me →'}
+              {isOffline ? 'Offline - Connect to search' : searchMode === 'ai' ? 'AI Search →' : 'Fast Search →'}
             </button>
           </div>
         )}
