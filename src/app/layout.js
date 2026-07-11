@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "Odyssey",
-  description: "AI-powered hiking and travel companion",
+  title: "Odyssey — Trail intelligence for every group",
+  description: "AI-powered hiking recommendations, offline-ready trail maps, and live GPS tracking.",
   manifest: "/manifest.json",
 };
 

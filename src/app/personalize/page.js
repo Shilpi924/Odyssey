@@ -69,14 +69,11 @@ function SubGroup({ label, children }) {
 export default function Personalize() {
   const router = useRouter();
   const [prefs, setPrefs] = useState({
-    interests: [],
+    interests: ['Hiking'], // Default to hiking
     hiking: { difficulty: '', features: '', length: '', elevation: '' },
-    museums: { types: [], vibe: [], era: '' },
     food: { cuisines: [], diningStyle: '', mealTime: [], atmosphere: [], diet: [] },
-    nightlife: { types: [], music: [], vibe: '' },
-    parks: { types: [], activities: [] },
-    shopping: { types: [], categories: [] },
-    liveMusic: { genres: [], venueSize: '', setting: '' },
+    places: { types: [], vibe: [] },
+    family: { activities: [], ages: [] },
     wellness: { types: [], frequency: '', environment: '' },
     activityLevel: '',
     travelWith: '',
@@ -125,11 +122,14 @@ export default function Personalize() {
   }, []);
 
   const toggleInterest = (interest) => {
+    // Hiking is always selected, can't be deselected
+    if (interest === 'Hiking') return;
+    
     setPrefs(prev => ({
       ...prev,
       interests: prev.interests.includes(interest)
-        ? [] // Deselect if already selected
-        : [interest], // Only allow one at a time
+        ? prev.interests.filter(i => i !== interest)
+        : [...prev.interests, interest],
     }));
   };
 
@@ -183,190 +183,103 @@ export default function Personalize() {
 
         <div className="space-y-8">
 
-          {/* ── Interests ── */}
+          {/* ── HIKING (Primary) ── */}
+          <SubSection icon="🥾" title="Your hiking preferences" color="emerald">
+            <SubGroup label="Difficulty">
+              {[['🌿 Easy','Easy'],['🥾 Moderate','Moderate'],['⛰️ Strenuous','Strenuous'],['🧗 Expert / Scramble','Expert'],['🚫 None / Any','None']].map(([label, value]) => (
+                <PillButton key={value} label={label} selected={prefs.hiking.difficulty.includes(value)} onClick={() => toggleMulti('hiking','difficulty',value)} color="emerald" />
+              ))}
+            </SubGroup>
+            <SubGroup label="Trail Features">
+              {[['🌳 Shaded / Forest','Shaded'],['☀️ Open / Sunny','Sunny'],['💧 Near Water / Waterfall','Water'],['🏔️ Summit Views','Summit'],['🐾 Dog-Friendly','DogFriendly'],['🔄 Loop Trail','Loop'],['📸 Scenic / Photogenic','Scenic'],['🚗 Easy Parking','EasyParking'],['🌸 Wildflowers','Wildflowers'],['🧊 Snow / Alpine','Alpine'],['🚫 None / Any','None']].map(([label, value]) => (
+                <PillButton key={value} label={label} selected={prefs.hiking.features.includes(value)} onClick={() => toggleMulti('hiking','features',value)} color="teal" />
+              ))}
+            </SubGroup>
+            <SubGroup label="Preferred Trail Length">
+              {[['< 2 miles','short'],['2–5 miles','medium'],['5–10 miles','long'],['10+ miles','verylong'],['🚫 None / Any','None']].map(([label, value]) => (
+                <PillButton key={value} label={label} selected={prefs.hiking.length===value} onClick={() => setSingle('hiking','length',value)} color="blue" />
+              ))}
+            </SubGroup>
+            <SubGroup label="Elevation Gain">
+              {[['Flat (< 200 ft)','flat'],['Gentle (200–800 ft)','gentle'],['Moderate (800–2000 ft)','moderate'],['Steep (2000+ ft)','steep'],['🚫 None / Any','None']].map(([label, value]) => (
+                <PillButton key={value} label={label} selected={prefs.hiking.elevation===value} onClick={() => setSingle('hiking','elevation',value)} color="amber" />
+              ))}
+            </SubGroup>
+          </SubSection>
+
+          {/* ── SUPPORTING FEATURES ── */}
           <section>
-            <h2 className="text-xl font-semibold text-white mb-4 flex items-center"><span className="mr-2">❤️</span> What are you interested in?</h2>
+            <h2 className="text-xl font-semibold text-white mb-4 flex items-center"><span className="mr-2">✨</span> Supporting features (optional)</h2>
             <div className="flex flex-wrap gap-3">
-              {['Hiking','Museums','Food & Drink','Nightlife','Parks','Shopping','Live Music','Wellness'].map(interest => (
+              {['🍔 Eat nearby','🏛️ Places to visit after the hike','👨‍👩‍👧‍👦 Family-friendly activities','💆 Recovery and wellness'].map(interest => (
                 <PillButton key={interest} label={interest} selected={selected(interest)} onClick={() => toggleInterest(interest)} color="indigo" />
               ))}
             </div>
           </section>
 
-          {/* ── HIKING ── */}
-          {selected('Hiking') && (
-            <SubSection icon="🥾" title="Tell us more about your hiking style" color="emerald">
-              <SubGroup label="Difficulty">
-                {[['🌿 Easy','Easy'],['🥾 Moderate','Moderate'],['⛰️ Strenuous','Strenuous'],['🧗 Expert / Scramble','Expert'],['🚫 None / Any','None']].map(([label, value]) => (
-                  <PillButton key={value} label={label} selected={prefs.hiking.difficulty.includes(value)} onClick={() => toggleMulti('hiking','difficulty',value)} color="emerald" />
-                ))}
-              </SubGroup>
-              <SubGroup label="Trail Features">
-                {[['🌳 Shaded / Forest','Shaded'],['☀️ Open / Sunny','Sunny'],['💧 Near Water / Waterfall','Water'],['🏔️ Summit Views','Summit'],['🐾 Dog-Friendly','DogFriendly'],['🔄 Loop Trail','Loop'],['📸 Scenic / Photogenic','Scenic'],['🚗 Easy Parking','EasyParking'],['🌸 Wildflowers','Wildflowers'],['🧊 Snow / Alpine','Alpine'],['🚫 None / Any','None']].map(([label, value]) => (
-                  <PillButton key={value} label={label} selected={prefs.hiking.features.includes(value)} onClick={() => toggleMulti('hiking','features',value)} color="teal" />
-                ))}
-              </SubGroup>
-              <SubGroup label="Preferred Trail Length">
-                {[['< 2 miles','short'],['2–5 miles','medium'],['5–10 miles','long'],['10+ miles','verylong'],['🚫 None / Any','None']].map(([label, value]) => (
-                  <PillButton key={value} label={label} selected={prefs.hiking.length===value} onClick={() => setSingle('hiking','length',value)} color="blue" />
-                ))}
-              </SubGroup>
-              <SubGroup label="Elevation Gain">
-                {[['Flat (< 200 ft)','flat'],['Gentle (200–800 ft)','gentle'],['Moderate (800–2000 ft)','moderate'],['Steep (2000+ ft)','steep'],['🚫 None / Any','None']].map(([label, value]) => (
-                  <PillButton key={value} label={label} selected={prefs.hiking.elevation===value} onClick={() => setSingle('hiking','elevation',value)} color="amber" />
-                ))}
-              </SubGroup>
-            </SubSection>
-          )}
-
-          {/* ── MUSEUMS ── */}
-          {selected('Museums') && (
-            <SubSection icon="🏛️" title="What kind of museums do you enjoy?" color="orange">
-              <SubGroup label="Museum Type">
-                {[['🎨 Art','Art'],['🏺 History','History'],['🔬 Science & Tech','Science'],['🦕 Natural History','NaturalHistory'],['🚀 Space & Aviation','Space'],['🖼️ Modern / Contemporary','Contemporary'],['🏆 Sports','Sports'],['🍷 Food & Culture','FoodCulture'],['🚫 None / Any','None']].map(([label, value]) => (
-                  <PillButton key={value} label={label} selected={prefs.museums.types.includes(value)} onClick={() => toggleMulti('museums','types',value)} color="orange" />
-                ))}
-              </SubGroup>
-              <SubGroup label="Vibe">
-                {[['👶 Kid-Friendly','Kids'],['🎧 Interactive','Interactive'],['📚 Deep Dives / Scholarly','Scholarly'],['🤳 Instagrammable','Insta'],['🌙 After Dark / Night Events','Night'],['🚫 None / Any','None']].map(([label, value]) => (
-                  <PillButton key={value} label={label} selected={prefs.museums.vibe.includes(value)} onClick={() => toggleMulti('museums','vibe',value)} color="amber" />
-                ))}
-              </SubGroup>
-              <SubGroup label="Historical Era">
-                {[['Ancient','Ancient'],['Medieval','Medieval'],['Industrial','Industrial'],['Modern (1900s)','Modern'],['Contemporary','Contemporary2'],['🚫 None / Any','None']].map(([label, value]) => (
-                  <PillButton key={value} label={label} selected={prefs.museums.era===value} onClick={() => setSingle('museums','era',value)} color="teal" />
-                ))}
-              </SubGroup>
-            </SubSection>
-          )}
-
           {/* ── FOOD & DRINK ── */}
-          {selected('Food & Drink') && (
-            <SubSection icon="🍔" title="What food experiences do you love?" color="rose">
+          {selected('🍔 Eat nearby') && (
+            <SubSection icon="�" title="Food preferences for after your hike" color="rose">
               <SubGroup label="Diet & Preferences">
-                {[['🌱 Vegetarian','Vegetarian'],['🌿 Vegan','Vegan'],['🌾 Gluten-Free','GlutenFree'],['🌶️ Spicy','Spicy'],['😌 Mild','Mild'],['🚫 None / Any','None']].map(([label, value]) => (
+                {[['� Vegetarian','Vegetarian'],['🌿 Vegan','Vegan'],['🌾 Gluten-Free','GlutenFree'],['�️ Spicy','Spicy'],['� Mild','Mild'],['🚫 None / Any','None']].map(([label, value]) => (
                   <PillButton key={value} label={label} selected={prefs.food.diet.includes(value)} onClick={() => toggleMulti('food','diet',value)} color="emerald" />
                 ))}
               </SubGroup>
-              <SubGroup label="Cuisine Type">
-                {[['🇮🇹 Italian','Italian'],['🇯🇵 Japanese / Sushi','Japanese'],['🇲🇽 Mexican','Mexican'],['🇮🇳 Indian','Indian'],['🇨🇳 Chinese','Chinese'],['🍕 Pizza','Pizza'],['🥩 BBQ / Grills','BBQ'],['🌮 Street Food','StreetFood'],['🥗 Healthy / Salads','Healthy'],['🍣 Seafood','Seafood'],['🇹🇭 Thai','Thai'],['🥐 Brunch / Bakery','Brunch'],['🚫 None / Any','None']].map(([label, value]) => (
-                  <PillButton key={value} label={label} selected={prefs.food.cuisines.includes(value)} onClick={() => toggleMulti('food','cuisines',value)} color="rose" />
-                ))}
-              </SubGroup>
               <SubGroup label="Dining Style">
-                {[['🪑 Fine Dining','Fine'],['😊 Casual','Casual'],['⚡ Quick Bites','Quick'],['☕ Café / Coffee','Cafe'],['🍺 Bar & Bites','Bar'],['🚫 None / Any','None']].map(([label, value]) => (
-                  <PillButton key={value} label={label} selected={prefs.food.diningStyle===value} onClick={() => setSingle('food','diningStyle',value)} color="orange" />
-                ))}
-              </SubGroup>
-              <SubGroup label="Meal Time">
-                {[['🌅 Breakfast','Breakfast'],['☀️ Lunch','Lunch'],['🌆 Dinner','Dinner'],['🌙 Late Night','LateNight'],['🚫 None / Any','None']].map(([label, value]) => (
-                  <PillButton key={value} label={label} selected={prefs.food.mealTime.includes(value)} onClick={() => toggleMulti('food','mealTime',value)} color="amber" />
-                ))}
-              </SubGroup>
-              <SubGroup label="Atmosphere">
-                {[['🌿 Outdoor Seating','Outdoor'],['🕯️ Romantic','Romantic'],['👨‍👩‍👧 Family-Friendly','Family'],['🎉 Lively / Buzzy','Lively'],['📖 Quiet / Cozy','Cozy'],['🚫 None / Any','None']].map(([label, value]) => (
-                  <PillButton key={value} label={label} selected={prefs.food.atmosphere.includes(value)} onClick={() => toggleMulti('food','atmosphere',value)} color="pink" />
+                {[['🍽️ Sit-down Restaurant','Restaurant'],['🥡 Takeout / Quick','Takeout'],['🍺 Casual / Pub','Pub'],['🍷 Fine Dining','FineDining'],['� None / Any','None']].map(([label, value]) => (
+                  <PillButton key={value} label={label} selected={prefs.food.diningStyle===value} onClick={() => setSingle('food','diningStyle',value)} color="amber" />
                 ))}
               </SubGroup>
             </SubSection>
           )}
 
-          {/* ── NIGHTLIFE ── */}
-          {selected('Nightlife') && (
-            <SubSection icon="🌙" title="What's your nightlife scene?" color="purple">
-              <SubGroup label="Type of Venue">
-                {[['🍸 Cocktail Bars','CocktailBar'],['🍺 Dive Bars','DiveBar'],['🪩 Dance Clubs','Club'],['🎸 Live Music Venues','LiveVenue'],['🎭 Comedy / Theater','Comedy'],['🎳 Arcade / Bowling','Arcade'],['🍷 Wine Bars','WineBar'],['🎲 Rooftop Bars','Rooftop'],['🚫 None / Any','None']].map(([label, value]) => (
-                  <PillButton key={value} label={label} selected={prefs.nightlife.types.includes(value)} onClick={() => toggleMulti('nightlife','types',value)} color="purple" />
-                ))}
-              </SubGroup>
-              <SubGroup label="Music Preference">
-                {[['🎵 House / Electronic','House'],['🎸 Rock / Indie','Rock'],['🎷 Jazz / Soul','Jazz'],['🎤 Hip-Hop / R&B','HipHop'],['🎻 Latin / Salsa','Latin'],['🎺 Pop / Top 40','Pop'],['🚫 None / Any','None']].map(([label, value]) => (
-                  <PillButton key={value} label={label} selected={prefs.nightlife.music.includes(value)} onClick={() => toggleMulti('nightlife','music',value)} color="pink" />
+          {/* ── PLACES TO VISIT ── */}
+          {selected('🏛️ Places to visit after the hike') && (
+            <SubSection icon="🏛️" title="Places you'd like to visit" color="orange">
+              <SubGroup label="Type of place">
+                {[['🏛️ Museums','Museums'],['� Parks & Gardens','Parks'],['🛍️ Shopping','Shopping'],['🎭 Entertainment','Entertainment'],['🚫 None / Any','None']].map(([label, value]) => (
+                  <PillButton key={value} label={label} selected={prefs.places.types.includes(value)} onClick={() => toggleMulti('places','types',value)} color="orange" />
                 ))}
               </SubGroup>
               <SubGroup label="Vibe">
-                {[['✨ Upscale / VIP','Upscale'],['😜 Wild & Loud','Wild'],['🧘 Chill & Relaxed','Chill'],['🌈 LGBTQ+ Friendly','LGBTQ'],['🕺 Dancing','Dancing'],['🚫 None / Any','None']].map(([label, value]) => (
-                  <PillButton key={value} label={label} selected={prefs.nightlife.vibe===value} onClick={() => setSingle('nightlife','vibe',value)} color="indigo" />
+                {[['👶 Kid-Friendly','Kids'],['🤳 Instagrammable','Insta'],['📚 Educational','Educational'],['🌙 Evening / Nightlife','Night'],['🚫 None / Any','None']].map(([label, value]) => (
+                  <PillButton key={value} label={label} selected={prefs.places.vibe.includes(value)} onClick={() => toggleMulti('places','vibe',value)} color="amber" />
                 ))}
               </SubGroup>
             </SubSection>
           )}
 
-          {/* ── PARKS ── */}
-          {selected('Parks') && (
-            <SubSection icon="🌳" title="What kind of parks do you enjoy?" color="teal">
-              <SubGroup label="Park Type">
-                {[['🏙️ City / Urban Park','City'],['🏞️ National / State Park','National'],['🌺 Botanical Garden','Botanical'],['🐕 Dog Park','Dog'],['🏊 With Pool / Lake','Water'],['🧒 With Playground','Playground'],['🏔️ Nature Reserve','Reserve'],['🚫 None / Any','None']].map(([label, value]) => (
-                  <PillButton key={value} label={label} selected={prefs.parks.types.includes(value)} onClick={() => toggleMulti('parks','types',value)} color="teal" />
+          {/* ── FAMILY ACTIVITIES ── */}
+          {selected('👨‍👩‍👧‍👦 Family-friendly activities') && (
+            <SubSection icon="👨‍👩‍👧‍👦" title="Family-friendly options" color="purple">
+              <SubGroup label="Activities">
+                {[['🎢 Theme Parks','ThemeParks'],['🦠 Zoos & Aquariums','Zoos'],['🎨 Arts & Crafts','Arts'],['🏃 Sports','Sports'],['🚫 None / Any','None']].map(([label, value]) => (
+                  <PillButton key={value} label={label} selected={prefs.family.activities.includes(value)} onClick={() => toggleMulti('family','activities',value)} color="purple" />
                 ))}
               </SubGroup>
-              <SubGroup label="Favorite Activities">
-                {[['🧺 Picnicking','Picnic'],['🚴 Biking','Biking'],['🏃 Running / Walking','Running'],['⚽ Sports Fields','Sports'],['🎣 Fishing','Fishing'],['🛶 Boating / Kayaking','Boating'],['📸 Photography','Photography'],['🔭 Stargazing','Stargazing'],['🚫 None / Any','None']].map(([label, value]) => (
-                  <PillButton key={value} label={label} selected={prefs.parks.activities.includes(value)} onClick={() => toggleMulti('parks','activities',value)} color="emerald" />
-                ))}
-              </SubGroup>
-            </SubSection>
-          )}
-
-          {/* ── SHOPPING ── */}
-          {selected('Shopping') && (
-            <SubSection icon="🛍️" title="What kind of shopping do you like?" color="pink">
-              <SubGroup label="Shopping Venue">
-                {[['🏬 Mall','Mall'],['🛒 Boutique','Boutique'],['👗 Thrift / Vintage','Thrift'],['🌾 Farmers Market','Farmers'],['💰 Outlet / Deals','Outlet'],['📚 Bookstores','Books'],['🎨 Artisan / Craft Markets','Artisan'],['🛍️ Open-Air Markets','OpenAir'],['🚫 None / Any','None']].map(([label, value]) => (
-                  <PillButton key={value} label={label} selected={prefs.shopping.types.includes(value)} onClick={() => toggleMulti('shopping','types',value)} color="pink" />
-                ))}
-              </SubGroup>
-              <SubGroup label="Shopping Categories">
-                {[['👟 Clothing & Fashion','Fashion'],['📱 Electronics / Tech','Tech'],['🏠 Home Decor','Home'],['💄 Beauty & Wellness','Beauty'],['🍫 Food & Specialty Goods','Food'],['🎁 Gifts & Souvenirs','Gifts'],['🎮 Games & Hobbies','Hobbies'],['🚫 None / Any','None']].map(([label, value]) => (
-                  <PillButton key={value} label={label} selected={prefs.shopping.categories.includes(value)} onClick={() => toggleMulti('shopping','categories',value)} color="rose" />
-                ))}
-              </SubGroup>
-            </SubSection>
-          )}
-
-          {/* ── LIVE MUSIC ── */}
-          {selected('Live Music') && (
-            <SubSection icon="🎵" title="What's your live music style?" color="blue">
-              <SubGroup label="Genre">
-                {[['🎸 Rock / Indie','Rock'],['🎷 Jazz / Blues','Jazz'],['🎻 Classical / Orchestra','Classical'],['🎤 Hip-Hop / R&B','HipHop'],['🤠 Country','Country'],['🎛️ Electronic / EDM','EDM'],['🎺 Pop','Pop'],['🎵 Folk / Acoustic','Folk'],['🎼 World / Latin','World'],['🚫 None / Any','None']].map(([label, value]) => (
-                  <PillButton key={value} label={label} selected={prefs.liveMusic.genres.includes(value)} onClick={() => toggleMulti('liveMusic','genres',value)} color="blue" />
-                ))}
-              </SubGroup>
-              <SubGroup label="Venue Size">
-                {[['🎙️ Intimate (< 200)','small'],['🎪 Club / Theater (200–2k)','medium'],['🏟️ Arena / Festival (2k+)','large'],['🚫 None / Any','None']].map(([label, value]) => (
-                  <PillButton key={value} label={label} selected={prefs.liveMusic.venueSize===value} onClick={() => setSingle('liveMusic','venueSize',value)} color="indigo" />
-                ))}
-              </SubGroup>
-              <SubGroup label="Setting">
-                {[['🏠 Indoor','Indoor'],['🌿 Outdoor / Open Air','Outdoor'],['🎡 Music Festival','Festival'],['🚫 None / Any','None']].map(([label, value]) => (
-                  <PillButton key={value} label={label} selected={prefs.liveMusic.setting===value} onClick={() => setSingle('liveMusic','setting',value)} color="purple" />
+              <SubGroup label="Age groups">
+                {[['👶 Toddlers (0-3)','Toddlers'],['👦 Kids (4-12)','Kids'],['🧑 Teens (13-17)','Teens'],['👴 Adults','Adults'],['🚫 None / Any','None']].map(([label, value]) => (
+                  <PillButton key={value} label={label} selected={prefs.family.ages.includes(value)} onClick={() => toggleMulti('family','ages',value)} color="teal" />
                 ))}
               </SubGroup>
             </SubSection>
           )}
 
           {/* ── WELLNESS ── */}
-          {selected('Wellness') && (
-            <SubSection icon="🧘" title="How do you like to take care of yourself?" color="cyan">
+          {selected('💆 Recovery and wellness') && (
+            <SubSection icon="💆" title="Wellness & recovery options" color="teal">
               <SubGroup label="Wellness Type">
-                {[['🧘 Yoga','Yoga'],['🧠 Meditation','Meditation'],['💆 Spa & Massage','Spa'],['🏋️ Gym / Fitness','Gym'],['🏊 Swimming','Swimming'],['🌿 Sound Bath / Healing','SoundBath'],['🥤 Juice & Nutrition','Nutrition'],['🛁 Hot Springs / Sauna','Sauna'],['🚫 None / Any','None']].map(([label, value]) => (
-                  <PillButton key={value} label={label} selected={prefs.wellness.types.includes(value)} onClick={() => toggleMulti('wellness','types',value)} color="cyan" />
-                ))}
-              </SubGroup>
-              <SubGroup label="How Often?">
-                {[['Daily','Daily'],['A few times a week','FewWeek'],['Weekends only','Weekends'],['Occasionally','Occasionally'],['🚫 None / Any','None']].map(([label, value]) => (
-                  <PillButton key={value} label={label} selected={prefs.wellness.frequency===value} onClick={() => setSingle('wellness','frequency',value)} color="teal" />
+                {[['💆 Spas & Massage','Spa'],['🧘 Yoga & Meditation','Yoga'],['�️ Fitness Centers','Fitness'],['♨️ Hot Springs','HotSprings'],['🚫 None / Any','None']].map(([label, value]) => (
+                  <PillButton key={value} label={label} selected={prefs.wellness.types.includes(value)} onClick={() => toggleMulti('wellness','types',value)} color="teal" />
                 ))}
               </SubGroup>
               <SubGroup label="Environment">
-                {[['🌿 Outdoor / Nature','Outdoor'],['🏢 Studio / Indoor','Indoor'],['🏡 At Home','Home'],['🌊 By the Water','Water'],['🚫 None / Any','None']].map(([label, value]) => (
-                  <PillButton key={value} label={label} selected={prefs.wellness.environment===value} onClick={() => setSingle('wellness','environment',value)} color="blue" />
+                {[['🌿 Nature / Outdoor','Outdoor'],['🏠 Indoor','Indoor'],['🌊 Waterfront','Waterfront'],['🚫 None / Any','None']].map(([label, value]) => (
+                  <PillButton key={value} label={label} selected={prefs.wellness.environment===value} onClick={() => setSingle('wellness','environment',value)} color="amber" />
                 ))}
               </SubGroup>
             </SubSection>
           )}
-
-
 
           {/* ── Group Dynamics (Free Text) ── */}
           <section>
@@ -385,7 +298,7 @@ export default function Personalize() {
           <section>
             <h2 className="text-xl font-semibold text-white mb-4 flex items-center"><span className="mr-2">♿</span> Accessibility Needs</h2>
             <div className="flex flex-wrap gap-3">
-              {['Wheelchair Accessible','Stroller Friendly','Paved Paths','No Stairs','None / Any'].map(acc => (
+              {['Maximum incline: gentle','Maximum distance: 3 miles','Frequent benches / rest stops','Accessible restroom required','Shade preferred','Avoid narrow paths','Avoid rocky surfaces','Mobility aid used','Child carrier / stroller','Hearing accessibility needs','Visual accessibility needs','None / Any'].map(acc => (
                 <PillButton key={acc} label={acc} selected={prefs.accessibility?.includes(acc)} onClick={() => toggleAccessibility(acc)} color="cyan" />
               ))}
             </div>

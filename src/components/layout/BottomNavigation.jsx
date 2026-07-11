@@ -5,8 +5,9 @@ import { motion } from 'framer-motion';
 import { useState, useEffect } from 'react';
 
 const navItems = [
-  { id: 'home', label: 'Explore', icon: '🏠', href: '/' },
-  { id: 'search', label: 'Search', icon: '🔍', href: '/search' },
+  { id: 'home', label: 'Discover', icon: '🧭', href: '/' },
+  { id: 'search', label: 'Map', icon: '🗺️', href: '/search' },
+  { id: 'track', label: 'Track', icon: '🥾', href: '/search', isPrimary: true },
   { id: 'saved', label: 'Saved', icon: '💾', href: '/saved' },
   { id: 'personalize', label: 'Profile', icon: '👤', href: '/personalize' },
 ];
