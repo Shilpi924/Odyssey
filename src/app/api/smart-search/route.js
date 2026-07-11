@@ -258,14 +258,20 @@ async function fastSearchNode(state) {
     });
 
   // Filter for safety: ensure we only suggest reasonably established trails if user asked for hikes
-  if (keyword.includes('hiking') || keyword.includes('trail')) {
+  // Only apply this filter if the query explicitly mentions hiking/trails
+  const isHikingQuery = keyword.toLowerCase().includes('hiking') || 
+                        keyword.toLowerCase().includes('trail') || 
+                        keyword.toLowerCase().includes('hike');
+  if (isHikingQuery) {
     trails = trails.filter(t => t.rating && t.rating >= 4.0 && t.userRatingsTotal > 5);
   }
 
-  // Fetch real routes in parallel
-  await Promise.all(trails.map(async (t) => {
-    t.route = await fetchRealRoute(t.lat, t.lng, t.placeId);
-  }));
+  // Fetch real routes in parallel (only for hiking-related queries)
+  if (isHikingQuery) {
+    await Promise.all(trails.map(async (t) => {
+      t.route = await fetchRealRoute(t.lat, t.lng, t.placeId);
+    }));
+  }
 
   trails.sort((a, b) => a.distanceNum - b.distanceNum);
 
@@ -280,14 +286,38 @@ async function aiSearchNode(state) {
   const loc = locationName || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
   const searchRadius = radius ? `${radius} miles` : '15 miles';
 
+  // Determine if this is a food/drink query or hiking query
+  const isFoodQuery = query && (
+    query.toLowerCase().includes('coffee') ||
+    query.toLowerCase().includes('cafe') ||
+    query.toLowerCase().includes('restaurant') ||
+    query.toLowerCase().includes('food') ||
+    query.toLowerCase().includes('dining') ||
+    query.toLowerCase().includes('eat') ||
+    query.toLowerCase().includes('breakfast') ||
+    query.toLowerCase().includes('lunch') ||
+    query.toLowerCase().includes('dinner')
+  );
+
+  const isHikingQuery = query && (
+    query.toLowerCase().includes('hike') ||
+    query.toLowerCase().includes('trail') ||
+    query.toLowerCase().includes('mountain') ||
+    query.toLowerCase().includes('peak') ||
+    query.toLowerCase().includes('nature') ||
+    query.toLowerCase().includes('walk')
+  );
+
   const target = query ? `recommendations strictly matching "${query}"` : 'hiking trails and points of interest';
 
   const systemPrompt = `You are an expert local travel guide with deep knowledge of trails, food, local communities, and what makes an experience personally meaningful.
-Suggest exactly 10 real, specific ${target} near the user's location (within ${searchRadius}) that best match their preferences, personality, current weather, and any natural language request. 
+Suggest exactly 10 real, specific ${target} near the user's location (within ${searchRadius}) that best match their preferences, personality, current weather, and any natural language request.
 CRITICAL: Analyze their profile and explicitly recommend places/activities that like-minded people with the exact same interests enjoy doing.
 CRITICAL: If the user searches for a specific cuisine, dietary restriction, or food type (e.g., "Indian vegetarian food"), YOU MUST ONLY return places that exactly match this requirement. Do not return unrelated options.
 CRITICAL: The nearest matching locations MUST appear first in your response array. Order them strictly by increasing distance from the user.
 ${state.priceRange ? `CRITICAL: The user has requested a price range of ${state.priceRange}. Only return options that fit within this budget.` : ''}
+${isFoodQuery ? 'CRITICAL: This is a FOOD/DRINK search. ONLY return restaurants, cafes, coffee shops, or food establishments. DO NOT return hiking trails or outdoor activities.' : ''}
+${isHikingQuery ? 'CRITICAL: This is a HIKING search. ONLY return hiking trails, nature walks, or outdoor activities. DO NOT return restaurants or food establishments.' : ''}
 CRITICAL: If the user has a preferred difficulty, try to match it. HOWEVER, if their current query contradicts their preference (e.g., asking for "kid friendly" but profile says "Strenuous"), prioritize the query over the profile! In the "why" field, explicitly warn the user if you are suggesting a strenuous hike, or explain that you chose an easier hike for the kids despite their preference.
 ${state.excludeNames?.length ? `CRITICAL: The user wants MORE results. DO NOT return any of these previously suggested places: ${state.excludeNames.join(', ')}. Return up to 10 NEW places. If you can only find a few, return them. DO NOT apologize or add conversational text. ONLY return the JSON array.` : ''}
 

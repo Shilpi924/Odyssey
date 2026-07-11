@@ -490,6 +490,36 @@ function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetView
   const diffBadge = getDiff(trail.difficulty);
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const [imgLoaded, setImgLoaded] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
+  const observerRef = useRef(null);
+
+  // Intersection Observer for lazy loading
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.1, rootMargin: '50px' }
+    );
+
+    if (cardRef.current) {
+      observer.observe(cardRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [cardRef]);
+
+  // Preload image when card becomes visible
+  useEffect(() => {
+    if (isVisible && trail.lat && trail.lng) {
+      const img = new Image();
+      img.src = staticMapUrl(trail.lat, trail.lng, apiKey);
+      img.onload = () => setImgLoaded(true);
+    }
+  }, [isVisible, trail.lat, trail.lng, apiKey]);
 
   const handleDragEnd = (event, info) => {
     if (info.offset.x > 100) {
@@ -518,13 +548,19 @@ function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetView
       {/* Satellite thumbnail */}
       {trail.lat && trail.lng && (
         <div className="relative h-36 w-full overflow-hidden bg-slate-700">
-          <img
-            src={staticMapUrl(trail.lat, trail.lng, apiKey)}
-            alt={trail.name}
-            className={`w-full h-full object-cover transition-opacity duration-500 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
-            onLoad={() => setImgLoaded(true)}
-          />
-          {!imgLoaded && (
+          {isVisible ? (
+            <img
+              src={staticMapUrl(trail.lat, trail.lng, apiKey)}
+              alt={trail.name}
+              className={`w-full h-full object-cover transition-opacity duration-500 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
+              onLoad={() => setImgLoaded(true)}
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-6 h-6 rounded-full border-2 border-slate-500 border-t-transparent animate-spin" />
+            </div>
+          )}
+          {isVisible && !imgLoaded && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="w-6 h-6 rounded-full border-2 border-slate-500 border-t-transparent animate-spin" />
             </div>
@@ -692,9 +728,46 @@ function FastTrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetVi
   const d = getPinColor(index);
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const [imgLoaded, setImgLoaded] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
   const imgSrc = trail.photoRef
     ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=600&photoreference=${trail.photoRef}&key=${apiKey}`
     : staticMapUrl(trail.lat, trail.lng, apiKey);
+
+  // Intersection Observer for lazy loading
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.1, rootMargin: '50px' }
+    );
+
+    if (cardRef.current) {
+      observer.observe(cardRef.current);
+    }
+
+    return () => observer.disconnect();
+  }, [cardRef]);
+
+  // Preload image when card becomes visible
+  useEffect(() => {
+    if (isVisible && imgSrc) {
+      const img = new Image();
+      img.src = imgSrc;
+      img.onload = () => setImgLoaded(true);
+      img.onerror = () => {
+        // Fallback to static map if photo fails
+        if (trail.lat && trail.lng) {
+          const fallbackImg = new Image();
+          fallbackImg.src = staticMapUrl(trail.lat, trail.lng, apiKey);
+          fallbackImg.onload = () => setImgLoaded(true);
+        }
+      };
+    }
+  }, [isVisible, imgSrc, trail.lat, trail.lng, apiKey]);
 
   return (
     <div
@@ -706,16 +779,22 @@ function FastTrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetVi
     >
       {trail.lat && trail.lng && (
         <div className="relative h-32 w-full overflow-hidden bg-slate-700">
-          <img
-            src={imgSrc}
-            alt={trail.name}
-            className={`w-full h-full object-cover transition-opacity duration-500 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
-            onLoad={() => setImgLoaded(true)}
-            onError={(e) => {
-              if (trail.photoRef) e.target.src = staticMapUrl(trail.lat, trail.lng, apiKey);
-            }}
-          />
-          {!imgLoaded && (
+          {isVisible ? (
+            <img
+              src={imgSrc}
+              alt={trail.name}
+              className={`w-full h-full object-cover transition-opacity duration-500 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
+              onLoad={() => setImgLoaded(true)}
+              onError={(e) => {
+                if (trail.photoRef) e.target.src = staticMapUrl(trail.lat, trail.lng, apiKey);
+              }}
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-6 h-6 rounded-full border-2 border-slate-500 border-t-transparent animate-spin" />
+            </div>
+          )}
+          {isVisible && !imgLoaded && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="w-6 h-6 rounded-full border-2 border-slate-500 border-t-transparent animate-spin" />
             </div>
