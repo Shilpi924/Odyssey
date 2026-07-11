@@ -45,10 +45,13 @@
 
 - **Framework:** [Next.js (App Router)](https://nextjs.org/)
 - **AI Engine:** [LangGraph](https://langchain-ai.github.io/langgraphjs/) & Anthropic SDK (Claude 3.5 Sonnet / Opus / Haiku)
-- **Maps:** `@vis.gl/react-google-maps`, Google Maps Javascript API, Google Places API
+- **Maps:** MapLibre GL, react-map-gl, Google Maps Javascript API, Google Places API
 - **Offline & PWA:** `Serwist`, `Dexie.js` (IndexedDB)
 - **Styling:** Tailwind CSS (Modern Glassmorphism UI)
+- **Animations:** Framer Motion
 - **Auth:** NextAuth (Prisma Adapter)
+- **Database:** PostgreSQL with PostGIS
+- **Testing:** Vitest, Playwright, Testing Library
 
 ---
 

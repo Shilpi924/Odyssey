@@ -31,3 +31,23 @@ CREATE TABLE IF NOT EXISTS user_hike_logs (
   gps_path GEOMETRY(LineString, 4326),
   synced_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+-- 6. Create reviews table for user ratings and reviews
+CREATE TABLE IF NOT EXISTS reviews (
+  id TEXT PRIMARY KEY,
+  trail_id TEXT NOT NULL,
+  trail_name TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  user_name TEXT NOT NULL,
+  rating INT NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  comment TEXT NOT NULL,
+  photos TEXT[] DEFAULT '{}',
+  helpful_count INT DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 7. Create index for faster review queries
+CREATE INDEX IF NOT EXISTS reviews_trail_id_idx ON reviews(trail_id);
+CREATE INDEX IF NOT EXISTS reviews_user_id_idx ON reviews(user_id);
+CREATE INDEX IF NOT EXISTS reviews_created_at_idx ON reviews(created_at DESC);
