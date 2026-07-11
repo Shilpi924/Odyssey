@@ -3,15 +3,71 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+// Natural language parser for voice queries
+function parseVoiceQuery(transcript) {
+  const lower = transcript.toLowerCase();
+  const constraints = {
+    difficulty: [],
+    features: [],
+    maxLength: null,
+    minLength: null,
+    query: transcript
+  };
+
+  // Parse difficulty
+  if (lower.includes('easy')) constraints.difficulty.push('Easy');
+  if (lower.includes('moderate')) constraints.difficulty.push('Moderate');
+  if (lower.includes('strenuous') || lower.includes('hard')) constraints.difficulty.push('Strenuous');
+  if (lower.includes('expert') || lower.includes('extreme')) constraints.difficulty.push('Expert');
+
+  // Parse features
+  if (lower.includes('dog') || lower.includes('pet')) constraints.features.push('DogFriendly');
+  if (lower.includes('shaded') || lower.includes('shade')) constraints.features.push('Shaded');
+  if (lower.includes('sunny') || lower.includes('sun')) constraints.features.push('Sunny');
+  if (lower.includes('water') || lower.includes('lake') || lower.includes('river')) constraints.features.push('Water');
+  if (lower.includes('scenic') || lower.includes('view') || lower.includes('viewpoint')) constraints.features.push('Scenic');
+  if (lower.includes('parking')) constraints.features.push('EasyParking');
+  if (lower.includes('wildflower') || lower.includes('flower')) constraints.features.push('Wildflowers');
+
+  // Parse length
+  const lengthMatch = lower.match(/under\s*(\d+)\s*(mile|mi)/i);
+  if (lengthMatch) {
+    constraints.maxLength = parseInt(lengthMatch[1]);
+  }
+  const lengthMatch2 = lower.match(/less than\s*(\d+)\s*(mile|mi)/i);
+  if (lengthMatch2) {
+    constraints.maxLength = parseInt(lengthMatch2[1]);
+  }
+  const lengthMatch3 = lower.match(/(\d+)\s*(mile|mi)\s*(or less|or shorter)/i);
+  if (lengthMatch3) {
+    constraints.maxLength = parseInt(lengthMatch3[1]);
+  }
+
+  return constraints;
+}
+
 export default function HomeSearchBar() {
   const [query, setQuery] = useState('');
   const [isListening, setIsListening] = useState(false);
+  const [interpretedQuery, setInterpretedQuery] = useState(null);
   const router = useRouter();
 
   const handleSearch = (e) => {
     e.preventDefault();
     if (query.trim()) {
-      router.push(`/search?q=${encodeURIComponent(query)}`);
+      const constraints = parseVoiceQuery(query);
+      const params = new URLSearchParams();
+      params.set('q', query);
+      if (constraints.difficulty.length > 0) {
+        params.set('difficulty', constraints.difficulty.join(','));
+      }
+      if (constraints.features.length > 0) {
+        params.set('features', constraints.features.join(','));
+      }
+      if (constraints.maxLength) {
+        params.set('maxLength', constraints.maxLength);
+      }
+      router.push(`/search?${params.toString()}`);
     }
   };
 
@@ -28,15 +84,32 @@ export default function HomeSearchBar() {
     
     recognition.onstart = () => {
       setIsListening(true);
+      setInterpretedQuery(null);
     };
     
     recognition.onresult = (event) => {
       const transcript = event.results[0][0].transcript;
       setQuery(transcript);
       setIsListening(false);
+      
+      // Parse and show interpreted query
+      const constraints = parseVoiceQuery(transcript);
+      setInterpretedQuery(constraints);
+      
       // Auto submit after voice search
       if (transcript.trim()) {
-        router.push(`/search?q=${encodeURIComponent(transcript)}`);
+        const params = new URLSearchParams();
+        params.set('q', transcript);
+        if (constraints.difficulty.length > 0) {
+          params.set('difficulty', constraints.difficulty.join(','));
+        }
+        if (constraints.features.length > 0) {
+          params.set('features', constraints.features.join(','));
+        }
+        if (constraints.maxLength) {
+          params.set('maxLength', constraints.maxLength);
+        }
+        router.push(`/search?${params.toString()}`);
       }
     };
     
@@ -86,6 +159,27 @@ export default function HomeSearchBar() {
           <span className="text-xl">{isListening ? '🔴' : '🎙️'}</span>
         </button>
       </div>
+      
+      {/* Interpreted query display */}
+      {interpretedQuery && (interpretedQuery.difficulty.length > 0 || interpretedQuery.features.length > 0 || interpretedQuery.maxLength) && (
+        <div className="mt-3 flex flex-wrap gap-2 text-xs">
+          {interpretedQuery.difficulty.map(d => (
+            <span key={d} className="px-2 py-1 bg-indigo-900/50 text-indigo-300 rounded-full border border-indigo-500/30">
+              {d}
+            </span>
+          ))}
+          {interpretedQuery.features.map(f => (
+            <span key={f} className="px-2 py-1 bg-emerald-900/50 text-emerald-300 rounded-full border border-emerald-500/30">
+              {f}
+            </span>
+          ))}
+          {interpretedQuery.maxLength && (
+            <span className="px-2 py-1 bg-amber-900/50 text-amber-300 rounded-full border border-amber-500/30">
+              Under {interpretedQuery.maxLength}mi
+            </span>
+          )}
+        </div>
+      )}
     </form>
   );
 }

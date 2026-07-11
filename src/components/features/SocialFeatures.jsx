@@ -22,7 +22,7 @@ function ActivityFeedItem({ activity }) {
       case 'hike_completed':
         return `completed ${activity.trailName}`;
       case 'review_posted':
-        return `reviewed ${activity_trailName}`;
+        return `reviewed ${activity.trailName}`;
       case 'photo_uploaded':
         return `added photos to ${activity.trailName}`;
       case 'trail_saved':
