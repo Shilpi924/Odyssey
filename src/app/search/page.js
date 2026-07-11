@@ -2224,7 +2224,9 @@ function HikeSearchContent() {
           </svg>
         </Link>
         <div className="flex-1 min-w-0">
-          <h1 className="text-white font-bold text-base">🥾 Hikes Near Me</h1>
+          <h1 className="text-white font-bold text-base">
+            {searchQuery ? `🔍 ${searchQuery}` : '🥾 Hikes Near Me'}
+          </h1>
           {locationName && <p className="text-slate-400 text-xs truncate">{locationName}</p>}
         </div>
         {hasPrefs && (

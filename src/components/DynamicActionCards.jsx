@@ -14,9 +14,9 @@ export default function DynamicActionCards() {
   useEffect(() => {
     // 1. Core Guaranteed Cards (Order is fixed)
     const baseCards = [
-      { title: "Hikes near me", icon: "🥾", description: "Find the best trails and nature walks.", href: "/search?q=hikes" },
-      { title: "Food I like", icon: "🍔", description: "Discover restaurants based on your taste.", href: "/search?q=food" },
-      { title: "Kid-friendly", icon: "👨‍👩‍👧‍👦", description: "Activities perfect for you and your kids.", href: "/search?q=kids" }
+      { title: "Hikes near me", icon: "🥾", description: "Find the best trails and nature walks.", href: "/search?q=hikes", label: "Hikes" },
+      { title: "Food I like", icon: "🍔", description: "Discover restaurants based on your taste.", href: "/search?q=food", label: "Food" },
+      { title: "Kid-friendly", icon: "👨‍👩‍👧‍👦", description: "Activities perfect for you and your kids.", href: "/search?q=kids", label: "Kids" }
     ];
 
     const personalized = [];
@@ -24,19 +24,19 @@ export default function DynamicActionCards() {
     if (saved) {
       try {
         const prefs = JSON.parse(saved);
-        if (prefs.interests?.includes('Nightlife')) personalized.push({ title: "Nightlife", icon: "🌙", description: "Find the best bars and clubs.", href: "/search?q=nightlife" });
-        if (prefs.interests?.includes('Museums')) personalized.push({ title: "Museums", icon: "🏛️", description: "Explore local museums and history.", href: "/search?q=museums" });
-        if (prefs.interests?.includes('Shopping')) personalized.push({ title: "Shopping", icon: "🛍️", description: "Find local boutiques and markets.", href: "/search?q=shopping" });
-        if (prefs.interests?.includes('Live Music')) personalized.push({ title: "Live Music", icon: "🎵", description: "Catch a local gig or concert.", href: "/search?q=live music" });
+        if (prefs.interests?.includes('Nightlife')) personalized.push({ title: "Nightlife", icon: "🌙", description: "Find the best bars and clubs.", href: "/search?q=nightlife", label: "Nightlife" });
+        if (prefs.interests?.includes('Museums')) personalized.push({ title: "Museums", icon: "🏛️", description: "Explore local museums and history.", href: "/search?q=museums", label: "Museums" });
+        if (prefs.interests?.includes('Shopping')) personalized.push({ title: "Shopping", icon: "🛍️", description: "Find local boutiques and markets.", href: "/search?q=shopping", label: "Shopping" });
+        if (prefs.interests?.includes('Live Music')) personalized.push({ title: "Live Music", icon: "🎵", description: "Catch a local gig or concert.", href: "/search?q=live music", label: "Live Music" });
       } catch (e) {
         console.error(e);
       }
     }
 
     const defaultExtras = [
-      { title: "Suggested for you", icon: "✨", description: "Discover what like-minded people are doing.", href: "/search?q=popular activities for people like me" },
-      { title: "Hidden Gems", icon: "💎", description: "Discover secret, uncrowded trails and spots.", href: "/search?q=hidden gems" },
-      { title: "Coffee Shops", icon: "☕", description: "Perfect spots for post-hike recovery.", href: "/search?q=coffee" },
+      { title: "Suggested for you", icon: "✨", description: "Discover what like-minded people are doing.", href: "/search?q=popular activities for people like me", label: "Suggestions" },
+      { title: "Hidden Gems", icon: "💎", description: "Discover secret, uncrowded trails and spots.", href: "/search?q=hidden gems", label: "Hidden Gems" },
+      { title: "Coffee Shops", icon: "☕", description: "Perfect spots for post-hike recovery.", href: "/search?q=coffee", label: "Coffee" },
     ];
 
     // Combine them, deduplicate by title, and limit to 7 (leaving 1 slot for zip code)

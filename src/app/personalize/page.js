@@ -121,10 +121,8 @@ export default function Personalize() {
       }
     };
 
-    if (status !== 'loading') {
-      loadPrefs();
-    }
-  }, [session, status]);
+    loadPrefs();
+  }, []);
 
   const toggleInterest = (interest) => {
     setPrefs(prev => ({
