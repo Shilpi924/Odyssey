@@ -13,6 +13,9 @@ import TrailConditions from '@/components/features/TrailConditions';
 import PointsOfInterest from '@/components/features/PointsOfInterest';
 import Terrain3DPreview from '@/components/features/Terrain3DPreview';
 import PrintMaps from '@/components/features/PrintMaps';
+import TrailCardSkeleton from '@/components/ui/TrailCardSkeleton';
+import QuickFilters from '@/components/ui/QuickFilters';
+import SearchHistory, { addToHistory } from '@/components/ui/SearchHistory';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -1056,6 +1059,10 @@ function HikeSearchContent() {
   const [searchRadius, setSearchRadius] = useState(25);
   const [priceRange, setPriceRange] = useState('');
   
+  // ── Filter state
+  const [activeFilters, setActiveFilters] = useState([]);
+  const [filteredTrails, setFilteredTrails] = useState([]);
+  
   // ── Preloading cache
   const [preloadedData, setPreloadedData] = useState(null);
   const [isPreloading, setIsPreloading] = useState(false);
@@ -1588,6 +1595,11 @@ function HikeSearchContent() {
         setLocationName(locName);
         setStatus('searching');
 
+        // Add to search history
+        if (searchQuery) {
+          addToHistory(searchQuery);
+        }
+
         // Use fast-search for default, smart-search for AI mode
         const apiUrl = searchMode === 'ai' ? '/api/smart-search' : '/api/fast-search';
         const body = searchMode === 'ai' 
@@ -1644,6 +1656,43 @@ function HikeSearchContent() {
     },
     [searchQuery, searchMode, preferences, groupMode, groupDescription, searchRadius, preloadedData, preloadedKey, priceRange]
   );
+
+  // Filter trails based on active filters
+  useEffect(() => {
+    if (activeFilters.length === 0) {
+      setFilteredTrails(trails);
+      return;
+    }
+
+    const filtered = trails.filter(trail => {
+      for (const filter of activeFilters) {
+        switch (filter) {
+          case 'distance':
+            const dist = parseFloat(trail.distance) || 999;
+            if (dist >= 5) return false;
+            break;
+          case 'easy':
+            if (trail.difficulty !== 'Easy') return false;
+            break;
+          case 'moderate':
+            if (trail.difficulty !== 'Moderate') return false;
+            break;
+          case 'rating':
+            if (!trail.rating || trail.rating < 4) return false;
+            break;
+          case 'dog':
+            if (!trail.features?.includes('DogFriendly')) return false;
+            break;
+          case 'scenic':
+            if (!trail.features?.includes('Scenic')) return false;
+            break;
+        }
+      }
+      return true;
+    });
+
+    setFilteredTrails(filtered);
+  }, [activeFilters, trails]);
 
   // Session Storage Caching
   useEffect(() => {
@@ -2555,9 +2604,9 @@ function HikeSearchContent() {
 
         {status === 'searching' && (
           <div className="flex flex-col gap-4 p-4 mt-2">
-            <SkeletonTrailCard />
-            <SkeletonTrailCard />
-            <SkeletonTrailCard />
+            <TrailCardSkeleton />
+            <TrailCardSkeleton />
+            <TrailCardSkeleton />
           </div>
         )}
 
@@ -2589,6 +2638,13 @@ function HikeSearchContent() {
                 )}
               </div>
             </div>
+
+            {/* Quick Filters */}
+            <QuickFilters 
+              trails={trails} 
+              activeFilters={activeFilters}
+              onFilter={setActiveFilters} 
+            />
 
             {/* Active preference chips (AI mode only) */}
             {hasPrefs && source === 'ai' && (
@@ -2622,8 +2678,19 @@ function HikeSearchContent() {
 
             {/* Trail cards */}
             <div className="px-4 py-4 flex flex-col gap-4">
-              {trails.map((trail, i) =>
-                source === 'ai' ? (
+              {filteredTrails.length === 0 && activeFilters.length > 0 ? (
+                <div className="text-center py-8 text-slate-400">
+                  <p className="text-sm">No trails match your filters</p>
+                  <button 
+                    onClick={() => setActiveFilters([])}
+                    className="mt-2 text-xs text-indigo-400 hover:text-indigo-300"
+                  >
+                    Clear filters
+                  </button>
+                </div>
+              ) : (
+                filteredTrails.map((trail, i) =>
+                  source === 'ai' ? (
                   <AITrailCard
                     key={i}
                     trail={trail}
@@ -2652,6 +2719,7 @@ function HikeSearchContent() {
                     onStartHike={startHike}
                     downloadProgress={downloadProgress?.id === `${trail.name}-${trail.lat}` ? downloadProgress : null}
                   />
+                )
                 )
               )}
               <p className="text-center text-slate-600 text-xs pb-4">
@@ -2687,6 +2755,14 @@ function HikeSearchContent() {
               <h2 className="text-white text-xl font-bold mb-2">Find your perfect hike</h2>
               <p className="text-slate-400 text-sm">Describe what you&apos;re after, or just tap search</p>
             </div>
+
+            {/* Search History */}
+            <SearchHistory 
+              onSelect={(query) => {
+                setSearchQuery(query);
+                runSearch();
+              }}
+            />
 
             {/* Natural language input */}
             <div>

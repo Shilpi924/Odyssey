@@ -7,6 +7,7 @@ import { deleteAreaTiles, clearAllTiles } from '@/lib/offline-maps';
 import Map, { Marker, Source, Layer } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import maplibregl from 'maplibre-gl';
+import { motion } from 'framer-motion';
 
 const OSM_STYLE = {
   version: 8,
@@ -81,6 +82,7 @@ export default function SavedHikesPage() {
   const [savedHikes, setSavedHikes] = useState([]);
   const [userLoc, setUserLoc] = useState(null);
   const [quota, setQuota] = useState(null);
+  const [activeTab, setActiveTab] = useState('saved'); // 'saved' | 'completed' | 'planned'
 
   const [selectedIdx, setSelectedIdx] = useState(null);
   const [mapCenter, setMapCenter] = useState(null);
@@ -190,13 +192,49 @@ export default function SavedHikesPage() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </Link>
-        <h1 className="text-white font-bold text-base flex-1">💾 Offline Hikes</h1>
+        <h1 className="text-white font-bold text-base flex-1">🧭 My Trails</h1>
       </header>
 
       <div className="flex-1 flex flex-col md:flex-row min-h-0 relative w-full">
         {/* Left Side: Hikes List */}
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-6 md:w-1/2">
           
+          {/* Tabs */}
+          <div className="flex gap-2 bg-slate-800 p-1 rounded-xl shrink-0">
+            {['saved', 'completed', 'planned'].map(tab => (
+              <motion.button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                whileTap={{ scale: 0.95 }}
+                className={`flex-1 py-2 px-4 rounded-lg text-xs font-medium transition-all ${
+                  activeTab === tab
+                    ? 'bg-indigo-600 text-white shadow-lg'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {tab === 'saved' ? '💾 Saved' : tab === 'completed' ? '✅ Completed' : '📅 Planned'}
+              </motion.button>
+            ))}
+          </div>
+
+          {/* Stats */}
+          {savedHikes.length > 0 && (
+            <div className="grid grid-cols-3 gap-2 shrink-0">
+              <div className="bg-slate-800 border border-slate-700 p-3 rounded-xl text-center">
+                <p className="text-lg font-bold text-white">{savedHikes.length}</p>
+                <p className="text-[10px] text-slate-400">Saved</p>
+              </div>
+              <div className="bg-slate-800 border border-slate-700 p-3 rounded-xl text-center">
+                <p className="text-lg font-bold text-emerald-400">0</p>
+                <p className="text-[10px] text-slate-400">Completed</p>
+              </div>
+              <div className="bg-slate-800 border border-slate-700 p-3 rounded-xl text-center">
+                <p className="text-lg font-bold text-amber-400">0</p>
+                <p className="text-[10px] text-slate-400">Planned</p>
+              </div>
+            </div>
+          )}
+
           {/* Storage Quota */}
           {quota && (
             <div className="bg-slate-800 border border-slate-700 p-4 rounded-2xl flex justify-between items-center shrink-0">
