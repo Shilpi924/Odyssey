@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable @next/next/no-img-element -- Camera captures use temporary local object URLs. */
 
 import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';

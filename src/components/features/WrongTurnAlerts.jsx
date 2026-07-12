@@ -63,9 +63,9 @@ export default function WrongTurnAlerts({ trail, userLocation, isActive, onDismi
             </div>
           </div>
           <div className="flex-1 min-w-0">
-            <h4 className="text-white font-bold text-sm mb-1">You're Off Route!</h4>
+            <h4 className="text-white font-bold text-sm mb-1">You&apos;re Off Route!</h4>
             <p className="text-rose-200 text-xs mb-2">
-              You're approximately {Math.round(distanceFromRoute)} meters away from the trail.
+              You&apos;re approximately {Math.round(distanceFromRoute)} meters away from the trail.
             </p>
             <div className="flex gap-2">
               <button

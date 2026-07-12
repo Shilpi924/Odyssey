@@ -1,6 +1,7 @@
 'use client';
+/* eslint-disable @next/next/no-img-element -- Review media may be user-provided or third-party URLs. */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 function StarRating({ rating, onRatingChange, readonly = false, size = 'md' }) {
@@ -131,11 +132,7 @@ export default function ReviewSystem({ trailId, trailName }) {
   const [loading, setLoading] = useState(false);
   const [sortBy, setSortBy] = useState('recent');
 
-  useEffect(() => {
-    fetchReviews();
-  }, [trailId]);
-
-  const fetchReviews = async () => {
+  const fetchReviews = useCallback(async () => {
     try {
       const res = await fetch(`/api/reviews?trailId=${trailId}`);
       if (res.ok) {
@@ -145,7 +142,12 @@ export default function ReviewSystem({ trailId, trailName }) {
     } catch (error) {
       console.error('Failed to fetch reviews:', error);
     }
-  };
+  }, [trailId]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(fetchReviews, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchReviews]);
 
   const handleSubmitReview = async (e) => {
     e.preventDefault();

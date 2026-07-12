@@ -3,6 +3,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return Infinity;
+  const R = 3958.8;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 export default function ARNavigation({ trail, userLocation, onClose }) {
   const [cameraActive, setCameraActive] = useState(false);
   const [compassHeading, setCompassHeading] = useState(0);
@@ -12,92 +21,39 @@ export default function ARNavigation({ trail, userLocation, onClose }) {
   const canvasRef = useRef(null);
 
   useEffect(() => {
-    if (cameraActive) {
-      startCamera();
-      startCompass();
-      generateWaypoints();
-    } else {
-      stopCamera();
-      stopCompass();
-    }
+    if (!cameraActive) return;
+    let stream;
+    const videoElement = videoRef.current;
+    const handleOrientation = (event) => event.alpha !== null && setCompassHeading(event.alpha);
+
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      .then((nextStream) => {
+        stream = nextStream;
+        if (videoElement) {
+          videoElement.srcObject = nextStream;
+          videoElement.play();
+        }
+      })
+      .catch((error) => {
+        console.error('Camera access denied:', error);
+        setCameraActive(false);
+      });
+    window.addEventListener('deviceorientation', handleOrientation);
+
+    const coords = trail?.route?.geometry?.coordinates || [];
+    const points = coords.filter((_, i) => i % 5 === 0).map((coord, i) => ({
+      lat: coord[1], lng: coord[0], name: `Waypoint ${i + 1}`,
+      distance: calculateDistance(userLocation?.lat, userLocation?.lng, coord[1], coord[0]),
+    })).sort((a, b) => a.distance - b.distance);
+    // State updates are deferred because camera/compass setup is the effect's external synchronization target.
+    queueMicrotask(() => { setWaypoints(points); setCurrentWaypoint(points[0] || null); });
 
     return () => {
-      stopCamera();
-      stopCompass();
+      stream?.getTracks().forEach(track => track.stop());
+      if (videoElement) videoElement.srcObject = null;
+      window.removeEventListener('deviceorientation', handleOrientation);
     };
-  }, [cameraActive, trail]);
-
-  const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-      }
-    } catch (error) {
-      console.error('Camera access denied:', error);
-      alert('Camera access required for AR navigation');
-      setCameraActive(false);
-    }
-  };
-
-  const stopCamera = () => {
-    if (videoRef.current?.srcObject) {
-      const tracks = videoRef.current.srcObject.getTracks();
-      tracks.forEach(track => track.stop());
-      videoRef.current.srcObject = null;
-    }
-  };
-
-  const startCompass = () => {
-    if ('DeviceOrientationEvent' in window) {
-      const handleOrientation = (event) => {
-        if (event.alpha !== null) {
-          setCompassHeading(event.alpha);
-        }
-      };
-      window.addEventListener('deviceorientation', handleOrientation);
-      return () => window.removeEventListener('deviceorientation', handleOrientation);
-    }
-  };
-
-  const stopCompass = () => {
-    // Event listener cleanup handled in startCompass
-  };
-
-  const generateWaypoints = () => {
-    if (!trail || !trail.route) return;
-    
-    // Generate waypoints from trail route
-    const route = trail.route;
-    const coords = route.geometry?.coordinates || [];
-    
-    if (coords.length > 0) {
-      const points = coords
-        .filter((_, i) => i % 5 === 0) // Every 5th point
-        .map((coord, i) => ({
-          lat: coord[1],
-          lng: coord[0],
-          name: `Waypoint ${i + 1}`,
-          distance: calculateDistance(userLocation?.lat, userLocation?.lng, coord[1], coord[0])
-        }))
-        .sort((a, b) => a.distance - b.distance);
-      
-      setWaypoints(points);
-      setCurrentWaypoint(points[0]);
-    }
-  };
-
-  const calculateDistance = (lat1, lon1, lat2, lon2) => {
-    if (!lat1 || !lon1 || !lat2 || !lon2) return Infinity;
-    const R = 3958.8; // miles
-    const dLat = ((lat2 - lat1) * Math.PI) / 180;
-    const dLon = ((lon2 - lon1) * Math.PI) / 180;
-    const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  };
+  }, [cameraActive, trail, userLocation]);
 
   const calculateBearing = (lat1, lon1, lat2, lon2) => {
     const dLon = ((lon2 - lon1) * Math.PI) / 180;

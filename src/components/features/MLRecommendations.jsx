@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 
 export default function MLRecommendations({ userId, onTrailSelect }) {
@@ -8,13 +8,7 @@ export default function MLRecommendations({ userId, onTrailSelect }) {
   const [loading, setLoading] = useState(true);
   const [preferences, setPreferences] = useState(null);
 
-  useEffect(() => {
-    if (userId) {
-      fetchRecommendations();
-    }
-  }, [userId]);
-
-  const fetchRecommendations = async () => {
+  const fetchRecommendations = useCallback(async () => {
     try {
       setLoading(true);
       const res = await fetch(`/api/recommendations/ml?userId=${userId}`);
@@ -28,7 +22,13 @@ export default function MLRecommendations({ userId, onTrailSelect }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const timer = window.setTimeout(fetchRecommendations, 0);
+    return () => window.clearTimeout(timer);
+  }, [userId, fetchRecommendations]);
 
   if (loading) {
     return (

@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element -- This fixture intentionally tests raw image markup. */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';

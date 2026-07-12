@@ -1,33 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 
 export default function CommunityHeatmap({ trails, onTrailSelect }) {
-  const [heatmapData, setHeatmapData] = useState([]);
   const [showHeatmap, setShowHeatmap] = useState(true);
-
-  useEffect(() => {
-    // Generate simulated heatmap data based on trail popularity
-    const generateHeatmapData = () => {
-      return trails.map((trail, index) => {
-        // Simulate traffic data based on estimated weekly visitors
-        const traffic = trail.estimatedWeeklyVisitors || Math.floor(Math.random() * 5000) + 100;
-        const popularity = Math.min(traffic / 5000, 1); // Normalize to 0-1
-        
-        return {
-          ...trail,
-          traffic,
-          popularity,
-          lastUpdated: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
-        };
-      });
-    };
-
-    if (trails && trails.length > 0) {
-      setHeatmapData(generateHeatmapData());
-    }
-  }, [trails]);
+  const heatmapData = useMemo(() => (trails || []).map((trail, index) => {
+    const traffic = trail.estimatedWeeklyVisitors || ((index * 977) % 4900) + 100;
+    return { ...trail, traffic, popularity: Math.min(traffic / 5000, 1), lastUpdated: trail.lastUpdated || 'Recently' };
+  }), [trails]);
 
   const getHeatmapColor = (popularity) => {
     if (popularity < 0.2) return 'bg-emerald-500/30 border-emerald-500/50';
@@ -39,7 +20,7 @@ export default function CommunityHeatmap({ trails, onTrailSelect }) {
 
   const getTrafficLabel = (popularity) => {
     if (popularity < 0.2) return 'Quiet';
-    if (popularity < 0.4) 'Low Traffic';
+    if (popularity < 0.4) return 'Low Traffic';
     if (popularity < 0.6) return 'Moderate';
     if (popularity < 0.8) return 'Busy';
     return 'Crowded';

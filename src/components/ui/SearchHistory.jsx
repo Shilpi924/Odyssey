@@ -1,21 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 
 const MAX_HISTORY = 10;
 
 export default function SearchHistory({ onSelect, onClear }) {
-  const [history, setHistory] = useState([]);
-
-  useEffect(() => {
-    const saved = localStorage.getItem('odyssey_search_history');
-    if (saved) {
-      try {
-        setHistory(JSON.parse(saved));
-      } catch {}
-    }
-  }, []);
+  const [history, setHistory] = useState(() => {
+    if (typeof window === 'undefined') return [];
+    try { return JSON.parse(localStorage.getItem('odyssey_search_history') || '[]'); }
+    catch { return []; }
+  });
 
   const clearHistory = () => {
     setHistory([]);

@@ -31,7 +31,7 @@
 - **Intuitive Zooming:** Two-finger panning and zooming natively supported via auto gesture handling.
 - **In-App Street View:** Drag around a 360° street view panorama of the trailhead directly within the app.
 
-### 🌐 Complete Offline Mode (PWA)
+### 🌐 Offline-ready saved trails and GPS tracking (PWA)
 - **Installable:** Functions as a Progressive Web App (PWA) that can be installed directly to your phone's home screen.
 - **Saved Offline Maps:** Download specific trails and locations to IndexedDB for offline access.
 - **Offline Maps & GPS:** On the trail without cell service, the app tracks your live location via satellite GPS and renders a pulsing dot over your saved offline map.

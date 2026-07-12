@@ -1,8 +1,64 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --app-bg: #071a24;
+  --app-surface: #0d2531;
+  --app-surface-raised: #12313f;
+  --app-text: #f5f7f6;
+  --app-muted: #9eb0b6;
+  --app-primary: #65d6c1;
+  --app-primary-strong: #2bb79f;
+  --app-accent: #ffb86b;
+  --app-border: rgba(195, 228, 229, .14);
+  --app-glow: rgba(65, 207, 185, .16);
+  --background: var(--app-bg);
+  --foreground: var(--app-text);
+}
+
+:root[data-theme="alpine"] {
+  color-scheme: dark;
+}
+
+:root[data-theme="meadow"] {
+  --app-bg: #101a15;
+  --app-surface: #18261e;
+  --app-surface-raised: #203228;
+  --app-text: #faf8f1;
+  --app-muted: #abb9ae;
+  --app-primary: #91d6a6;
+  --app-primary-strong: #57b879;
+  --app-accent: #e7ad61;
+  --app-border: rgba(213, 235, 218, .14);
+  --app-glow: rgba(111, 201, 139, .15);
+  color-scheme: dark;
+}
+
+:root[data-theme="sunset"] {
+  --app-bg: #19151a;
+  --app-surface: #251e25;
+  --app-surface-raised: #332733;
+  --app-text: #fff8f1;
+  --app-muted: #c0aebc;
+  --app-primary: #f09a78;
+  --app-primary-strong: #d97359;
+  --app-accent: #f1c27d;
+  --app-border: rgba(243, 212, 199, .14);
+  --app-glow: rgba(230, 120, 99, .16);
+  color-scheme: dark;
+}
+
+:root[data-theme="daylight"] {
+  --app-bg: #f4f1e8;
+  --app-surface: #fffdf7;
+  --app-surface-raised: #e8ede5;
+  --app-text: #17251e;
+  --app-muted: #607068;
+  --app-primary: #217a65;
+  --app-primary-strong: #155d4c;
+  --app-accent: #c87137;
+  --app-border: rgba(29, 74, 58, .16);
+  --app-glow: rgba(42, 139, 110, .12);
+  color-scheme: light;
 }
 
 @theme inline {
@@ -12,15 +68,75 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Compatibility layer while feature screens migrate from slate utilities to tokens. */
+[data-theme] .bg-slate-900 { background-color: var(--app-bg) !important; }
+[data-theme] .bg-slate-800\/50,
+[data-theme] .bg-slate-800\/80,
+[data-theme] .bg-slate-900\/50,
+[data-theme] .bg-slate-900\/95 { background-color: color-mix(in srgb, var(--app-surface) 90%, transparent) !important; }
+[data-theme] .border-slate-700,
+[data-theme] .border-slate-700\/50 { border-color: var(--app-border) !important; }
+[data-theme] .text-slate-400 { color: var(--app-muted) !important; }
+[data-theme] .bg-indigo-600,
+[data-theme] .bg-indigo-500 { background-color: var(--app-primary-strong) !important; }
+[data-theme] .hover\:bg-indigo-500:hover,
+[data-theme] .hover\:bg-indigo-600:hover,
+[data-theme] .hover\:bg-indigo-700:hover { background-color: color-mix(in srgb, var(--app-primary-strong) 82%, black) !important; }
+[data-theme] .text-indigo-200,
+[data-theme] .text-indigo-300,
+[data-theme] .text-indigo-400 { color: var(--app-primary) !important; }
+[data-theme] .border-indigo-500,
+[data-theme] .border-indigo-400 { border-color: var(--app-primary) !important; }
+[data-theme] .focus\:border-indigo-500:focus { border-color: var(--app-primary) !important; }
+[data-theme] .focus\:ring-indigo-500:focus { --tw-ring-color: var(--app-primary) !important; }
+
+[data-theme="daylight"] .text-white { color: var(--app-text) !important; }
+[data-theme="daylight"] .text-slate-300 { color: #52645b !important; }
+[data-theme="daylight"] .bg-slate-700 { background-color: #dfe7df !important; }
+[data-theme="daylight"] .bg-slate-700\/50 { background-color: rgba(215, 226, 217, .75) !important; }
+
+/* Account-level accessibility settings remain independent from the color palette. */
+[data-contrast="high"] {
+  --app-muted: color-mix(in srgb, var(--app-text) 82%, transparent);
+  --app-border: color-mix(in srgb, var(--app-text) 38%, transparent);
+}
+
+[data-contrast="high"] :focus-visible {
+  outline: 3px solid var(--app-accent);
+  outline-offset: 3px;
+}
+
+[data-motion="reduced"] *,
+[data-motion="reduced"] *::before,
+[data-motion="reduced"] *::after {
+  scroll-behavior: auto !important;
+  animation-duration: .01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: .01ms !important;
+}
+
+/* Raster maps inherit a subtle palette treatment; markers and labels stay readable. */
+[data-theme="alpine"] .maplibregl-canvas { filter: saturate(.78) hue-rotate(8deg) brightness(.88) contrast(1.08); }
+[data-theme="meadow"] .maplibregl-canvas { filter: saturate(.82) hue-rotate(-8deg) brightness(.88) contrast(1.06); }
+[data-theme="sunset"] .maplibregl-canvas { filter: saturate(.7) sepia(.12) hue-rotate(325deg) brightness(.84) contrast(1.08); }
+[data-theme="daylight"] .maplibregl-canvas { filter: saturate(.78) brightness(1.03) contrast(.96); }
+[data-contrast="high"] .maplibregl-canvas { filter: contrast(1.2) saturate(.9); }
+[data-motion="reduced"] .maplibregl-canvas { transition: none !important; }
+
+.maplibregl-ctrl-group,
+.maplibregl-popup-content {
+  background: var(--app-surface) !important;
+  color: var(--app-text) !important;
+  border-color: var(--app-border) !important;
+}
+
+::selection {
+  background: var(--app-primary);
+  color: var(--app-bg);
 }

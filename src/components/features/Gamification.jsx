@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 
 // Badge definitions
@@ -38,13 +38,7 @@ export default function Gamification({ userId }) {
   const [earnedBadges, setEarnedBadges] = useState([]);
   const [nextBadges, setNextBadges] = useState([]);
 
-  useEffect(() => {
-    if (userId) {
-      fetchGamificationData();
-    }
-  }, [userId]);
-
-  const fetchGamificationData = async () => {
+  const fetchGamificationData = useCallback(async () => {
     try {
       const res = await fetch(`/api/gamification/stats?userId=${userId}`);
       if (res.ok) {
@@ -54,7 +48,7 @@ export default function Gamification({ userId }) {
         
         // Calculate next badges to earn
         const next = BADGES.filter(badge => {
-          if (earnedBadges.includes(badge.id)) return false;
+          if ((data.earnedBadges || []).includes(badge.id)) return false;
           
           switch (badge.type) {
             case 'hikes':
@@ -85,7 +79,13 @@ export default function Gamification({ userId }) {
     } catch (error) {
       console.error('Error fetching gamification data:', error);
     }
-  };
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const timer = window.setTimeout(fetchGamificationData, 0);
+    return () => window.clearTimeout(timer);
+  }, [userId, fetchGamificationData]);
 
   const getProgress = (badge) => {
     switch (badge.type) {

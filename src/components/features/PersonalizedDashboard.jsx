@@ -1,37 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ModernGlassCard from './ModernGlassCard';
 
+function getTimeProfile(hour) {
+  if (hour >= 5 && hour < 12) return { timeOfDay: 'morning', greeting: 'Good morning', icon: '🌅' };
+  if (hour >= 12 && hour < 17) return { timeOfDay: 'afternoon', greeting: 'Good afternoon', icon: '☀️' };
+  if (hour >= 17 && hour < 21) return { timeOfDay: 'evening', greeting: 'Good evening', icon: '🌤️' };
+  return { timeOfDay: 'night', greeting: 'Good night', icon: '🌙' };
+}
+
 export default function PersonalizedDashboard({ userLocation, weather, userPreferences }) {
-  const [timeOfDay, setTimeOfDay] = useState('morning');
-  const [recommendations, setRecommendations] = useState([]);
-  const [greeting, setGreeting] = useState('');
-
-  useEffect(() => {
-    determineTimeOfDay();
-    generateGreeting();
-    generateRecommendations();
-  }, [weather, userPreferences]);
-
-  const determineTimeOfDay = () => {
-    const hour = new Date().getHours();
-    if (hour >= 5 && hour < 12) setTimeOfDay('morning');
-    else if (hour >= 12 && hour < 17) setTimeOfDay('afternoon');
-    else if (hour >= 17 && hour < 21) setTimeOfDay('evening');
-    else setTimeOfDay('night');
-  };
-
-  const generateGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour >= 5 && hour < 12) setGreeting('Good morning');
-    else if (hour >= 12 && hour < 17) setGreeting('Good afternoon');
-    else if (hour >= 17 && hour < 21) setGreeting('Good evening');
-    else setGreeting('Good night');
-  };
-
-  const generateRecommendations = () => {
+  const hour = new Date().getHours();
+  const { timeOfDay, greeting } = getTimeProfile(hour);
+  const recommendations = useMemo(() => {
     const recs = [];
     const hour = new Date().getHours();
     const prefs = userPreferences || {};
@@ -150,8 +133,8 @@ export default function PersonalizedDashboard({ userLocation, weather, userPrefe
       });
     }
 
-    setRecommendations(recs.slice(0, 4));
-  };
+    return recs.slice(0, 4);
+  }, [weather, userPreferences]);
 
   const getWeatherIcon = () => {
     if (!weather) return '🌤️';
@@ -184,7 +167,7 @@ export default function PersonalizedDashboard({ userLocation, weather, userPrefe
           {greeting}! 👋
         </h1>
         <p className="text-slate-400">
-          Here's what's perfect for you right now
+          Here&apos;s what&apos;s perfect for you right now
         </p>
       </motion.div>
 
@@ -363,25 +346,8 @@ export default function PersonalizedDashboard({ userLocation, weather, userPrefe
 
 // Time-based greeting component
 export function TimeBasedGreeting() {
-  const [greeting, setGreeting] = useState('');
-  const [icon, setIcon] = useState('');
-
-  useEffect(() => {
-    const hour = new Date().getHours();
-    if (hour >= 5 && hour < 12) {
-      setGreeting('Good morning');
-      setIcon('🌅');
-    } else if (hour >= 12 && hour < 17) {
-      setGreeting('Good afternoon');
-      setIcon('☀️');
-    } else if (hour >= 17 && hour < 21) {
-      setGreeting('Good evening');
-      setIcon('🌤️');
-    } else {
-      setGreeting('Good night');
-      setIcon('🌙');
-    }
-  }, []);
+  const hour = new Date().getHours();
+  const { greeting, icon } = getTimeProfile(hour);
 
   return (
     <div className="flex items-center gap-3">

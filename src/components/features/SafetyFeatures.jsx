@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function SafetyFeatures({ trail, userLocation }) {
@@ -10,11 +10,7 @@ export default function SafetyFeatures({ trail, userLocation }) {
   const [sosCountdown, setSosCountdown] = useState(5);
   const [locationWatchId, setLocationWatchId] = useState(null);
 
-  useEffect(() => {
-    loadEmergencyContacts();
-  }, []);
-
-  const loadEmergencyContacts = async () => {
+  async function loadEmergencyContacts() {
     try {
       const res = await fetch('/api/safety/contacts');
       if (res.ok) {
@@ -24,7 +20,12 @@ export default function SafetyFeatures({ trail, userLocation }) {
     } catch (error) {
       console.error('Error loading contacts:', error);
     }
-  };
+  }
+
+  useEffect(() => {
+    const timer = window.setTimeout(loadEmergencyContacts, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const startLocationSharing = async () => {
     if (!navigator.geolocation) {
@@ -314,11 +315,7 @@ export function CheckInSystem({ trail }) {
   const [lastCheckIn, setLastCheckIn] = useState(null);
   const [checkInInterval, setCheckInInterval] = useState(null);
 
-  useEffect(() => {
-    loadLastCheckIn();
-  }, []);
-
-  const loadLastCheckIn = async () => {
+  const loadLastCheckIn = useCallback(async () => {
     try {
       const res = await fetch(`/api/safety/checkin?trailId=${trail?.id}`);
       if (res.ok) {
@@ -328,7 +325,12 @@ export function CheckInSystem({ trail }) {
     } catch (error) {
       console.error('Error loading check-in:', error);
     }
-  };
+  }, [trail]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(loadLastCheckIn, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadLastCheckIn]);
 
   const performCheckIn = async () => {
     try {
@@ -417,36 +419,29 @@ export function CheckInSystem({ trail }) {
 
 // Weather alerts component
 export function WeatherAlerts({ weather }) {
-  const [alerts, setAlerts] = useState([]);
-
-  useEffect(() => {
-    if (weather) {
-      generateAlerts(weather);
-    }
-  }, [weather]);
-
-  const generateAlerts = (weatherData) => {
+  const alerts = (() => {
+    if (!weather) return [];
     const newAlerts = [];
 
-    if (weatherData.code >= 95) {
+    if (weather.code >= 95) {
       newAlerts.push({
         type: 'danger',
         icon: '⛈️',
         message: 'Severe storm - seek shelter immediately'
       });
-    } else if (weatherData.code >= 80) {
+    } else if (weather.code >= 80) {
       newAlerts.push({
         type: 'warning',
         icon: '🌧️',
         message: 'Heavy rain expected - trails may be dangerous'
       });
-    } else if (weatherData.temp > 95) {
+    } else if (weather.temp > 95) {
       newAlerts.push({
         type: 'warning',
         icon: '🥵',
         message: 'Extreme heat - carry extra water'
       });
-    } else if (weatherData.temp < 32) {
+    } else if (weather.temp < 32) {
       newAlerts.push({
         type: 'warning',
         icon: '🥶',
@@ -454,8 +449,8 @@ export function WeatherAlerts({ weather }) {
       });
     }
 
-    setAlerts(newAlerts);
-  };
+    return newAlerts;
+  })();
 
   if (alerts.length === 0) return null;
 

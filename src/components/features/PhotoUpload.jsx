@@ -1,4 +1,5 @@
 'use client';
+/* eslint-disable @next/next/no-img-element -- User uploads and previews use temporary blob URLs. */
 
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';

@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useSession, signIn, signOut } from 'next-auth/react';
+import { applyDisplayPreferences } from '@/components/ThemeProvider';
+import { DEFAULT_THEME, THEMES, resolveTheme } from '@/lib/theme';
 
 function PillButton({ label, selected, onClick, color = 'indigo' }) {
   const colors = {
@@ -79,6 +81,10 @@ export default function Personalize() {
     travelWith: '',
     groupDynamics: '',
     accessibility: [],
+    theme: DEFAULT_THEME,
+    themeMode: 'manual',
+    highContrast: false,
+    reducedMotion: false,
   });
 
   const { data: session, status } = useSession();
@@ -115,11 +121,30 @@ export default function Personalize() {
 
       if (data) {
         setPrefs(prev => ({ ...prev, ...data }));
+        applyDisplayPreferences(data);
       }
     };
 
     loadPrefs();
-  }, []);
+  }, [session?.user]);
+
+  const selectTheme = (theme) => {
+    if (!session?.user) return;
+    setPrefs(prev => {
+      const next = { ...prev, theme };
+      applyDisplayPreferences(next);
+      return next;
+    });
+  };
+
+  const setDisplayPreference = (field, value) => {
+    if (!session?.user) return;
+    setPrefs(prev => {
+      const next = { ...prev, [field]: value };
+      applyDisplayPreferences(next);
+      return next;
+    });
+  };
 
   const toggleInterest = (interest) => {
     // Hiking is always selected, can't be deselected
@@ -161,10 +186,14 @@ export default function Personalize() {
     localStorage.setItem('userPreferences', JSON.stringify(prefs));
     if (session?.user) {
       try {
+        const resolvedTheme = resolveTheme(prefs, {
+          hour: new Date().getHours(),
+          systemDark: window.matchMedia('(prefers-color-scheme: dark)').matches,
+        });
         await fetch('/api/user/preferences', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ preferences: prefs })
+          body: JSON.stringify({ preferences: prefs, resolvedTheme })
         });
       } catch (e) {
         console.error('Failed to save to DB', e);
@@ -182,6 +211,51 @@ export default function Personalize() {
         </div>
 
         <div className="space-y-8">
+
+          {/* ── APPEARANCE ── */}
+          <section className="rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] p-6 transition-colors">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[.16em] text-[var(--app-primary)]">Appearance</p>
+                <h2 className="mt-2 text-xl font-semibold text-[var(--app-text)]">Choose your trail colors</h2>
+                <p className="mt-1 text-sm text-[var(--app-muted)]">Your theme follows you across devices.</p>
+              </div>
+              {session?.user && <span className="rounded-full border border-[var(--app-border)] px-3 py-1 text-xs text-[var(--app-muted)]">Live preview</span>}
+            </div>
+
+            {session?.user ? (
+              <div className="mt-6">
+                <div className="grid grid-cols-3 gap-2 rounded-xl bg-black/10 p-1.5" aria-label="Theme behavior">
+                  {[
+                    ['manual', 'Always'],
+                    ['system', 'Match device'],
+                    ['scheduled', 'Day & night'],
+                  ].map(([mode, label]) => <button key={mode} type="button" onClick={() => setDisplayPreference('themeMode', mode)} className={`rounded-lg px-2 py-2 text-xs font-semibold transition-colors ${(prefs.themeMode || 'manual') === mode ? 'bg-[var(--app-surface-raised)] text-[var(--app-text)] shadow-sm' : 'text-[var(--app-muted)]'}`}>{label}</button>)}
+                </div>
+                <p className="mt-2 text-xs text-[var(--app-muted)]">{prefs.themeMode === 'scheduled' ? 'Uses your location for local sunrise and sunset; falls back to 7 AM–6 PM.' : prefs.themeMode === 'system' ? 'Follows your device light or dark appearance.' : 'Uses your selected palette at all times.'}</p>
+                <div className="mt-5 grid sm:grid-cols-2 gap-3">
+                  {THEMES.map(theme => {
+                  const active = (prefs.theme || DEFAULT_THEME) === theme.id;
+                  return (
+                    <button key={theme.id} type="button" onClick={() => selectTheme(theme.id)} aria-pressed={active} className={`rounded-xl border p-4 text-left transition-all ${active ? 'border-[var(--app-primary)] ring-2 ring-[var(--app-primary)]/20' : 'border-[var(--app-border)] hover:-translate-y-0.5'}`}>
+                      <span className="flex gap-1.5">{theme.colors.map(color => <span key={color} className="h-7 w-7 rounded-full border border-black/10" style={{ backgroundColor: color }} />)}</span>
+                      <span className="mt-3 flex items-center justify-between"><span><span className="block font-semibold text-[var(--app-text)]">{theme.name}</span><span className="mt-0.5 block text-xs text-[var(--app-muted)]">{theme.description}</span></span>{active && <span className="text-[var(--app-primary)]">✓</span>}</span>
+                    </button>
+                  );
+                  })}
+                </div>
+                <div className="mt-5 grid sm:grid-cols-2 gap-3">
+                  <label className="flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-[var(--app-border)] p-4"><span><span className="block text-sm font-semibold text-[var(--app-text)]">Higher contrast</span><span className="mt-1 block text-xs text-[var(--app-muted)]">Stronger borders and clearer muted text</span></span><input type="checkbox" checked={Boolean(prefs.highContrast)} onChange={(e) => setDisplayPreference('highContrast', e.target.checked)} className="h-5 w-5 accent-[var(--app-primary)]" /></label>
+                  <label className="flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-[var(--app-border)] p-4"><span><span className="block text-sm font-semibold text-[var(--app-text)]">Reduce motion</span><span className="mt-1 block text-xs text-[var(--app-muted)]">Minimize animation and map transitions</span></span><input type="checkbox" checked={Boolean(prefs.reducedMotion)} onChange={(e) => setDisplayPreference('reducedMotion', e.target.checked)} className="h-5 w-5 accent-[var(--app-primary)]" /></label>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-[var(--app-border)] bg-black/10 p-4">
+                <div className="flex gap-1.5">{THEMES.map(theme => <span key={theme.id} className="h-8 w-8 rounded-full border border-white/10" style={{ background: `linear-gradient(135deg, ${theme.colors[0]} 50%, ${theme.colors[1]} 50%)` }} />)}</div>
+                <div className="sm:text-right"><p className="text-sm font-medium text-[var(--app-text)]">Sign in to unlock themes</p><button type="button" onClick={() => signIn('google')} className="mt-1 text-sm font-semibold text-[var(--app-primary)]">Continue with Google →</button></div>
+              </div>
+            )}
+          </section>
 
           {/* ── HIKING (Primary) ── */}
           <SubSection icon="🥾" title="Your hiking preferences" color="emerald">
@@ -219,14 +293,14 @@ export default function Personalize() {
 
           {/* ── FOOD & DRINK ── */}
           {selected('🍔 Eat nearby') && (
-            <SubSection icon="�" title="Food preferences for after your hike" color="rose">
+            <SubSection icon="🍽️" title="Food preferences for after your hike" color="rose">
               <SubGroup label="Diet & Preferences">
-                {[['� Vegetarian','Vegetarian'],['🌿 Vegan','Vegan'],['🌾 Gluten-Free','GlutenFree'],['�️ Spicy','Spicy'],['� Mild','Mild'],['🚫 None / Any','None']].map(([label, value]) => (
+                {[['🥕 Vegetarian','Vegetarian'],['🌿 Vegan','Vegan'],['🌾 Gluten-Free','GlutenFree'],['🌶️ Spicy','Spicy'],['🙂 Mild','Mild'],['🚫 None / Any','None']].map(([label, value]) => (
                   <PillButton key={value} label={label} selected={prefs.food.diet.includes(value)} onClick={() => toggleMulti('food','diet',value)} color="emerald" />
                 ))}
               </SubGroup>
               <SubGroup label="Dining Style">
-                {[['🍽️ Sit-down Restaurant','Restaurant'],['🥡 Takeout / Quick','Takeout'],['🍺 Casual / Pub','Pub'],['🍷 Fine Dining','FineDining'],['� None / Any','None']].map(([label, value]) => (
+                {[['🍽️ Sit-down Restaurant','Restaurant'],['🥡 Takeout / Quick','Takeout'],['🍺 Casual / Pub','Pub'],['🍷 Fine Dining','FineDining'],['🚫 None / Any','None']].map(([label, value]) => (
                   <PillButton key={value} label={label} selected={prefs.food.diningStyle===value} onClick={() => setSingle('food','diningStyle',value)} color="amber" />
                 ))}
               </SubGroup>
@@ -237,7 +311,7 @@ export default function Personalize() {
           {selected('🏛️ Places to visit after the hike') && (
             <SubSection icon="🏛️" title="Places you'd like to visit" color="orange">
               <SubGroup label="Type of place">
-                {[['🏛️ Museums','Museums'],['� Parks & Gardens','Parks'],['🛍️ Shopping','Shopping'],['🎭 Entertainment','Entertainment'],['🚫 None / Any','None']].map(([label, value]) => (
+                {[['🏛️ Museums','Museums'],['🌳 Parks & Gardens','Parks'],['🛍️ Shopping','Shopping'],['🎭 Entertainment','Entertainment'],['🚫 None / Any','None']].map(([label, value]) => (
                   <PillButton key={value} label={label} selected={prefs.places.types.includes(value)} onClick={() => toggleMulti('places','types',value)} color="orange" />
                 ))}
               </SubGroup>
@@ -269,7 +343,7 @@ export default function Personalize() {
           {selected('💆 Recovery and wellness') && (
             <SubSection icon="💆" title="Wellness & recovery options" color="teal">
               <SubGroup label="Wellness Type">
-                {[['💆 Spas & Massage','Spa'],['🧘 Yoga & Meditation','Yoga'],['�️ Fitness Centers','Fitness'],['♨️ Hot Springs','HotSprings'],['🚫 None / Any','None']].map(([label, value]) => (
+                {[['💆 Spas & Massage','Spa'],['🧘 Yoga & Meditation','Yoga'],['🏋️ Fitness Centers','Fitness'],['♨️ Hot Springs','HotSprings'],['🚫 None / Any','None']].map(([label, value]) => (
                   <PillButton key={value} label={label} selected={prefs.wellness.types.includes(value)} onClick={() => toggleMulti('wellness','types',value)} color="teal" />
                 ))}
               </SubGroup>

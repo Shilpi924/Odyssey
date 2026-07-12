@@ -2,7 +2,7 @@
 
 import { useRouter, usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 const navItems = [
   { id: 'home', label: 'Discover', icon: '🧭', href: '/' },
@@ -15,18 +15,9 @@ const navItems = [
 export default function BottomNavigation() {
   const router = useRouter();
   const pathname = usePathname();
-  const [activeTab, setActiveTab] = useState('home');
-
-  useEffect(() => {
-    // Determine active tab based on current pathname
-    const activeItem = navItems.find(item => pathname === item.href);
-    if (activeItem) {
-      setActiveTab(activeItem.id);
-    }
-  }, [pathname]);
+  const activeTab = navItems.find(item => pathname === item.href)?.id || 'home';
 
   const handleNav = (item) => {
-    setActiveTab(item.id);
     router.push(item.href);
   };
 

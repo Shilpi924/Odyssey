@@ -2,6 +2,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import AuthWrapper from "@/components/AuthWrapper";
 import BottomNavigation from "@/components/layout/BottomNavigation";
+import { cookies } from "next/headers";
+import { parseDisplayPreferences, THEME_COOKIE } from "@/lib/theme";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,14 +25,19 @@ export const viewport = {
   themeColor: "#0f172a",
 };
 
-export default function RootLayout({ children }) {
+export default async function RootLayout({ children }) {
+  const cookieStore = await cookies();
+  const initialDisplay = parseDisplayPreferences(cookieStore.get(THEME_COOKIE)?.value);
   return (
     <html
       lang="en"
+      data-theme={initialDisplay.resolvedTheme}
+      data-contrast={initialDisplay.highContrast ? 'high' : 'standard'}
+      data-motion={initialDisplay.reducedMotion ? 'reduced' : 'full'}
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
-        <AuthWrapper>{children}</AuthWrapper>
+      <body className="min-h-full flex flex-col transition-colors duration-300">
+        <AuthWrapper initialDisplay={initialDisplay}>{children}</AuthWrapper>
         <BottomNavigation />
       </body>
     </html>

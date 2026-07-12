@@ -1,6 +1,7 @@
 'use client';
+/* eslint-disable @next/next/no-img-element -- Trail photos use dynamic third-party and cached sources. */
 
-import { useState, useEffect, useRef, Suspense, useCallback } from 'react';
+import { useState, useEffect, useRef, Suspense, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Map, { Marker, Source, Layer } from 'react-map-gl/maplibre';
@@ -76,7 +77,7 @@ function hikingAdvisory(code, temp) {
   if (code >= 61) return { text: 'Rainy — bring waterproof layers', style: 'bg-blue-900/40 border-blue-500/40 text-blue-200' };
   if (code >= 45) return { text: 'Foggy — reduced visibility on ridges', style: 'bg-slate-700/60 border-slate-500/40 text-slate-200' };
   if (temp > 95) return { text: '🥵 Extreme heat — start before 8am, shaded trails only', style: 'bg-rose-900/40 border-rose-400/40 text-rose-200' };
-  if (temp > 85) return { text: '☀️ Warm day — Claude prioritised shaded trails for you', style: 'bg-amber-900/40 border-amber-500/40 text-amber-200' };
+  if (temp > 85) return { text: '☀️ Warm day — Odyssey prioritized shaded trails for you', style: 'bg-amber-900/40 border-amber-500/40 text-amber-200' };
   if (temp < 32) return { text: '🥶 Freezing — watch for ice on trails', style: 'bg-blue-900/40 border-blue-400/40 text-blue-200' };
   return { text: '🌿 Great conditions for hiking!', style: 'bg-emerald-900/40 border-emerald-500/40 text-emerald-200' };
 }
@@ -1061,7 +1062,6 @@ function HikeSearchContent() {
   
   // ── Filter state
   const [activeFilters, setActiveFilters] = useState([]);
-  const [filteredTrails, setFilteredTrails] = useState([]);
   
   // ── Preloading cache
   const [preloadedData, setPreloadedData] = useState(null);
@@ -1654,17 +1654,12 @@ function HikeSearchContent() {
         setStatus('error');
       }
     },
-    [searchQuery, searchMode, preferences, groupMode, groupDescription, searchRadius, preloadedData, preloadedKey, priceRange]
+    [searchQuery, searchMode, preferences, groupMode, groupDescription, searchRadius, preloadedData, preloadedKey, priceRange, preloadCardImages]
   );
 
-  // Filter trails based on active filters
-  useEffect(() => {
-    if (activeFilters.length === 0) {
-      setFilteredTrails(trails);
-      return;
-    }
-
-    const filtered = trails.filter(trail => {
+  // Filtering is derived data; memoization avoids a second render and stale results.
+  const filteredTrails = useMemo(() => trails.filter(trail => {
+    if (activeFilters.length === 0) return true;
       for (const filter of activeFilters) {
         switch (filter) {
           case 'distance':
@@ -1689,10 +1684,7 @@ function HikeSearchContent() {
         }
       }
       return true;
-    });
-
-    setFilteredTrails(filtered);
-  }, [activeFilters, trails]);
+    }), [activeFilters, trails]);
 
   // Session Storage Caching
   useEffect(() => {
@@ -2723,7 +2715,7 @@ function HikeSearchContent() {
                 )
               )}
               <p className="text-center text-slate-600 text-xs pb-4">
-                {source === 'ai' ? 'Powered by Claude AI · Open-Meteo weather' : 'Results from Google Places'}
+                {source === 'ai' ? 'AI-analyzed result · Open-Meteo weather' : 'Quick result · location and filters'}
               </p>
               
               {hasMore && (

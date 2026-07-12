@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSession } from 'next-auth/react';
 
@@ -76,13 +76,7 @@ export default function SocialFeatures() {
   const [following, setFollowing] = useState([]);
   const [followers, setFollowers] = useState([]);
 
-  useEffect(() => {
-    if (session?.user) {
-      fetchSocialData();
-    }
-  }, [session]);
-
-  const fetchSocialData = async () => {
+  async function fetchSocialData() {
     try {
       // Fetch activities
       const activitiesRes = await fetch('/api/social/activities');
@@ -101,7 +95,13 @@ export default function SocialFeatures() {
     } catch (error) {
       console.error('Error fetching social data:', error);
     }
-  };
+  }
+
+  useEffect(() => {
+    if (!session?.user) return;
+    const timer = window.setTimeout(fetchSocialData, 0);
+    return () => window.clearTimeout(timer);
+  }, [session?.user]);
 
   const tabs = [
     { id: 'feed', label: 'Activity Feed', icon: '📰' },
@@ -375,11 +375,7 @@ export function ShareModal({ isOpen, onClose, item }) {
 export function Achievements({ userId }) {
   const [achievements, setAchievements] = useState([]);
 
-  useEffect(() => {
-    fetchAchievements();
-  }, [userId]);
-
-  const fetchAchievements = async () => {
+  const fetchAchievements = useCallback(async () => {
     try {
       const res = await fetch(`/api/social/achievements?userId=${userId}`);
       if (res.ok) {
@@ -389,7 +385,12 @@ export function Achievements({ userId }) {
     } catch (error) {
       console.error('Error fetching achievements:', error);
     }
-  };
+  }, [userId]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(fetchAchievements, 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchAchievements]);
 
   return (
     <div className="bg-slate-900/50 backdrop-blur-sm rounded-3xl p-6 border border-slate-700/50">
