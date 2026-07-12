@@ -1,8 +1,40 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest';
 import { buildUserContext, distanceMiles } from '../src/app/api/smart-search/route.js';
+import { buildHikingSearchQuery, POST as fastSearch } from '../src/app/api/fast-search/route.js';
 
 describe('Smart Search API Helpers', () => {
+  describe('buildHikingSearchQuery', () => {
+    it('adds difficulty and trail intent to broad destination searches', () => {
+      expect(buildHikingSearchQuery('Yosemite', { hiking: { difficulty: ['Moderate'] } })).toBe('Moderate hiking trails Yosemite');
+    });
+
+    it('keeps fallback provider queries generic instead of hardcoding a trail', () => {
+      expect(buildHikingSearchQuery('Zion National Park', { hiking: { difficulty: ['Strenuous'] } }))
+        .toBe('Strenuous hiking trails Zion National Park');
+    });
+  });
+
+  describe('catalog-backed fast search', () => {
+    it('returns Yosemite results without requiring Google Places', async () => {
+      const request = new Request('http://localhost/api/fast-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lat: 37.8651,
+          lng: -119.5383,
+          query: 'strenuous hikes in Yosemite',
+          preferences: { hiking: { difficulty: ['Strenuous'] } },
+        }),
+      });
+      const response = await fastSearch(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.source).toBe('catalog');
+      expect(data.trails.map(trail => trail.placeId)).toEqual(expect.arrayContaining(['half-dome-jmt', 'el-capitan-trail']));
+    });
+  });
   describe('distanceMiles', () => {
     it('calculates the correct distance between two points', () => {
       // New York City to Los Angeles (approx 2445 miles)

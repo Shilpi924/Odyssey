@@ -1,7 +1,7 @@
 <div align="center">
   <img src="public/globe.svg" alt="Odyssey Logo" width="120" height="120" />
   <h1>🥾 Odyssey</h1>
-  <p><strong>Your highly personalized, AI-powered travel and hiking companion.</strong></p>
+  <p><strong>Your personalized outdoor and hiking companion.</strong></p>
 </div>
 
 <br />
@@ -37,7 +37,7 @@
 - **Offline Maps & GPS:** On the trail without cell service, the app tracks your live location via satellite GPS and renders a pulsing dot over your saved offline map.
 
 ### 💬 AI Trail Guide
-- Tap **"Ask AI"** on any trail to open an interactive chat drawer to ask questions about packing, parking, and crowds.
+- Tap **"Trail Guide"** on any trail to ask about packing, parking, and crowds.
 
 ---
 

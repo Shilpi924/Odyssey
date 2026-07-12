@@ -19,6 +19,7 @@ export default function PlanPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [form, setForm] = useState({ location: '', group: [], difficulty: 'Easy', distance: 'Under 3 miles', needs: [] });
+  const [locating, setLocating] = useState(false);
   const setOne = (key, value) => setForm((f) => ({ ...f, [key]: value }));
   const toggle = (key, value) => setForm((f) => ({ ...f, [key]: f[key].includes(value) ? f[key].filter((v) => v !== value) : [...f[key], value] }));
   const canContinue = step !== 0 || form.location.trim().length > 1;
@@ -30,6 +31,21 @@ export default function PlanPage() {
   const finish = () => {
     localStorage.setItem('odysseyHikePlan', JSON.stringify({ ...form, createdAt: new Date().toISOString() }));
     router.push(searchUrl);
+  };
+
+  const useCurrentLocation = () => {
+    if (!navigator.geolocation) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(async ({ coords }) => {
+      let label = `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`;
+      try {
+        const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${coords.latitude},${coords.longitude}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`);
+        const data = await response.json();
+        label = data.results?.[0]?.formatted_address || label;
+      } catch {}
+      setOne('location', label);
+      setLocating(false);
+    }, () => setLocating(false), { enableHighAccuracy: true, timeout: 10000 });
   };
 
   return (
@@ -48,7 +64,7 @@ export default function PlanPage() {
         </div>
 
         <section className="rounded-3xl border border-[var(--app-border)] bg-[var(--app-surface)] p-6 sm:p-10 shadow-2xl min-h-[440px] transition-colors">
-          {step === 0 && <div className="max-w-2xl"><p className="text-sm text-[#d9a14a]">Step 1 of 4</p><h1 className="mt-2 text-3xl sm:text-4xl font-semibold tracking-tight">Where do you want to hike?</h1><p className="mt-3 text-stone-400">Enter a city, park, or trail area. Odyssey will check nearby trail and weather context.</p><label className="block mt-9 text-sm font-semibold" htmlFor="location">Destination</label><div className="mt-2 flex rounded-xl border border-white/15 bg-black/20 p-2 focus-within:border-emerald-300"><span className="px-3 py-2 text-emerald-300">⌖</span><input id="location" autoFocus value={form.location} onChange={(e) => setOne('location', e.target.value)} onKeyDown={(e) => e.key === 'Enter' && canContinue && setStep(1)} placeholder="Try Yosemite Valley or Boulder, CO" className="w-full bg-transparent px-1 text-lg outline-none placeholder:text-stone-600" /></div><button type="button" onClick={() => setOne('location', 'My current location')} className="mt-4 text-sm font-semibold text-emerald-300 hover:text-emerald-200">⌖ Use my current location</button></div>}
+          {step === 0 && <div className="max-w-2xl"><p className="text-sm text-[#d9a14a]">Step 1 of 4</p><h1 className="mt-2 text-3xl sm:text-4xl font-semibold tracking-tight">Where do you want to hike?</h1><p className="mt-3 text-stone-400">Enter a city, park, or trail area. Odyssey will check nearby trail and weather context.</p><label className="block mt-9 text-sm font-semibold" htmlFor="location">Destination</label><div className="mt-2 flex rounded-xl border border-white/15 bg-black/20 p-2 focus-within:border-emerald-300"><span className="px-3 py-2 text-emerald-300">⌖</span><input id="location" autoFocus value={form.location} onChange={(e) => setOne('location', e.target.value)} onKeyDown={(e) => e.key === 'Enter' && canContinue && setStep(1)} placeholder={locating ? 'Finding your location…' : 'Try Yosemite Valley or Boulder, CO'} disabled={locating} className="w-full bg-transparent px-1 text-lg outline-none placeholder:text-stone-600 disabled:opacity-70" /></div><button type="button" onClick={useCurrentLocation} disabled={locating} className="mt-4 text-sm font-semibold text-emerald-300 hover:text-emerald-200 disabled:opacity-60">⌖ {locating ? 'Finding location…' : 'Use my current location'}</button></div>}
 
           {step === 1 && <div><p className="text-sm text-[#d9a14a]">Step 2 of 4</p><h1 className="mt-2 text-3xl sm:text-4xl font-semibold tracking-tight">Who’s coming along?</h1><p className="mt-3 text-stone-400">Choose all that apply. This shapes pace, terrain, and accessibility matches.</p><div className="mt-8 grid sm:grid-cols-2 md:grid-cols-3 gap-3">{groups.map((x) => <Choice key={x} active={form.group.includes(x)} onClick={() => toggle('group', x)}>{x}</Choice>)}</div><label className="block mt-8 text-sm text-stone-400">Group notes (optional)</label><input className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 outline-none focus:border-emerald-300" placeholder="e.g. One child and one older adult" /></div>}
 

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { searchCatalog, toLegacySearchResult } from '@/lib/trails/search-engine';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -33,21 +34,46 @@ function getSearchType(query, preferences) {
   return 'hiking'; // Default
 }
 
+export function buildHikingSearchQuery(query, preferences = {}) {
+  const base = query?.trim() || 'nearby';
+  const difficulties = preferences?.hiking?.difficulty;
+  const difficulty = (Array.isArray(difficulties) ? difficulties : [difficulties]).filter(Boolean).join(' ');
+  return `${difficulty ? `${difficulty} ` : ''}hiking trails ${base}`.trim();
+}
+
 export async function POST(request) {
   try {
     const { lat, lng, query, preferences, radius = 25, priceRange } = await request.json();
     
+    const searchType = getSearchType(query, preferences);
+    const requestedDifficulties = preferences?.hiking?.difficulty;
+    const requestedDifficulty = (Array.isArray(requestedDifficulties) ? requestedDifficulties : [requestedDifficulties]).filter(Boolean)[0];
+
+    // Prefer the structured catalog whenever the query resolves to a covered
+    // destination or trail. Generic Places remains a coverage fallback.
+    if (searchType === 'hiking') {
+      const catalogSearch = searchCatalog({ query, preferences, limit: 10 });
+      if (catalogSearch) {
+        return NextResponse.json({
+          trails: catalogSearch.results.map(({ trail, score }) => toLegacySearchResult(trail, score, { lat, lng })),
+          source: 'catalog',
+          weather: null,
+          entity: catalogSearch.entity,
+          filters: catalogSearch.filters,
+          attribution: 'Source: National Park Service',
+        });
+      }
+    }
+
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ error: 'Google Maps API key not configured' }, { status: 500 });
     }
-
-    const searchType = getSearchType(query, preferences);
     
     // Build Google Places search query
     let searchQuery = '';
     if (searchType === 'hiking') {
-      searchQuery = query || 'hiking trail';
+      searchQuery = buildHikingSearchQuery(query, preferences);
     } else if (searchType === 'food') {
       searchQuery = query || 'restaurant';
     }
@@ -62,15 +88,14 @@ export async function POST(request) {
     const placesRes = await fetch(placesUrl);
     const placesData = await placesRes.json();
     
-    if (placesData.status !== 'OK') {
+    if (placesData.status !== 'OK' && placesData.status !== 'ZERO_RESULTS') {
       console.error('Google Places error:', placesData.status);
       return NextResponse.json({ trails: [], source: 'fast', weather: null });
     }
     
     // Transform results to trail format
-    const trails = placesData.results
+    let trails = (placesData.results || [])
       .filter(place => place.rating && place.rating >= 3.5)
-      .slice(0, 10)
       .map(place => ({
         name: place.name,
         placeId: place.place_id,
@@ -79,7 +104,7 @@ export async function POST(request) {
         rating: place.rating,
         userRatingsTotal: place.user_ratings_total || 0,
         distance: distanceMiles(lat, lng, place.geometry.location.lat, place.geometry.location.lng).toFixed(1),
-        difficulty: searchType === 'hiking' ? 'Moderate' : null,
+        difficulty: searchType === 'hiking' ? (requestedDifficulty || 'Moderate') : null,
         length: searchType === 'hiking' ? '3-5 miles' : null,
         estimatedWeeklyVisitors: Math.floor((place.user_ratings_total || 100) * 1.5),
         features: searchType === 'hiking' ? ['Scenic', 'EasyParking'] : [],
@@ -88,9 +113,15 @@ export async function POST(request) {
         vicinity: place.vicinity || '',
         priceLevel: place.price_level || null,
       }));
-    
-    // Sort by distance
-    trails.sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance));
+
+    const specificTrails = trails.filter(trail => /trail|trailhead|dome|peak|falls|loop|ridge|point/i.test(trail.name));
+    if (specificTrails.length >= 3) trails = trails.filter(trail => !/national park|state park$/i.test(trail.name));
+    trails.sort((a, b) => {
+      const aSpecific = /trail|trailhead|dome|peak|falls|loop|ridge|point/i.test(a.name) ? 1 : 0;
+      const bSpecific = /trail|trailhead|dome|peak|falls|loop|ridge|point/i.test(b.name) ? 1 : 0;
+      return bSpecific - aSpecific || parseFloat(a.distance) - parseFloat(b.distance);
+    });
+    trails = trails.slice(0, 10);
     
     return NextResponse.json({
       trails,

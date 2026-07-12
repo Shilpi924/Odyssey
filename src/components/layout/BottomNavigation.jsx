@@ -6,8 +6,8 @@ import { useState } from 'react';
 
 const navItems = [
   { id: 'home', label: 'Discover', icon: '🧭', href: '/' },
-  { id: 'search', label: 'Map', icon: '🗺️', href: '/search' },
-  { id: 'track', label: 'Track', icon: '🥾', href: '/search', isPrimary: true },
+  { id: 'search', label: 'Map', icon: '🗺️', href: '/search?view=map#trail-map' },
+  { id: 'track', label: 'Track', icon: '🥾', href: '/search?view=track#trail-map', isPrimary: true },
   { id: 'saved', label: 'Saved', icon: '💾', href: '/saved' },
   { id: 'personalize', label: 'Profile', icon: '👤', href: '/personalize' },
 ];
@@ -15,14 +15,13 @@ const navItems = [
 export default function BottomNavigation() {
   const router = useRouter();
   const pathname = usePathname();
-  const activeTab = navItems.find(item => pathname === item.href)?.id || 'home';
+  const [selectedTab, setSelectedTab] = useState(null);
+  const activeTab = selectedTab || (pathname === '/search' ? 'search' : navItems.find(item => pathname === item.href)?.id || 'home');
 
   const handleNav = (item) => {
+    setSelectedTab(item.id);
     router.push(item.href);
   };
-
-  // Don't show on certain pages if needed
-  if (pathname === '/search') return null;
 
   return (
     <motion.div

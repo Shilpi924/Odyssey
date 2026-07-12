@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import Logo from '@/components/Logo';
-import MapPreview from '@/components/MapPreview';
 
 const actions = [
   { href: '/search?nearme=true', eyebrow: 'Use my location', title: 'Find hikes near me', icon: '⌖', tone: 'emerald' },
@@ -32,7 +31,7 @@ export default function Home() {
       </nav>
 
       <section className="relative z-10 max-w-7xl mx-auto px-5 sm:px-8 pt-14 sm:pt-20">
-        <div className="grid lg:grid-cols-[1.04fr_.96fr] gap-12 items-center">
+        <div className="max-w-4xl">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200/20 bg-emerald-300/5 px-3 py-1.5 text-xs font-semibold uppercase tracking-[.16em] text-emerald-200">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 animate-pulse" /> Built for the trail ahead
@@ -41,22 +40,13 @@ export default function Home() {
               The right trail for <span className="text-[#d9a14a] italic font-serif">everyone</span> in your group.
             </h1>
             <p className="mt-7 max-w-xl text-lg sm:text-xl leading-relaxed text-stone-300">
-              AI-powered hiking recommendations that consider ability, distance, weather, and accessibility—plus offline maps and live GPS tracking.
+              Hiking recommendations that consider ability, distance, weather, and accessibility—plus offline maps and live GPS tracking.
             </p>
             <div className="mt-9 flex flex-col sm:flex-row gap-3">
               <Link href="/plan" className="rounded-xl bg-[var(--app-accent)] px-6 py-4 text-center font-bold text-[#122019] hover:brightness-110 transition-all">Plan my hike <span className="ml-2">→</span></Link>
               <Link href="/search?nearme=true" className="rounded-xl border border-white/15 bg-white/5 px-6 py-4 text-center font-semibold hover:bg-white/10 transition-colors">Find trails near me</Link>
             </div>
             <p className="mt-4 text-xs text-stone-500">No account required · Official conditions should always be verified before starting</p>
-          </div>
-          <div className="relative lg:pl-4">
-            <div className="absolute -inset-5 rounded-[2rem] bg-emerald-300/10 blur-3xl" />
-            <div className="relative [&>div]:!mb-0 [&>div]:!max-w-none"><MapPreview /></div>
-            <div className="absolute -bottom-5 -left-1 sm:-left-6 rounded-2xl border border-white/10 bg-[#10241c]/95 p-4 shadow-2xl backdrop-blur-xl">
-              <p className="text-[10px] uppercase tracking-widest text-emerald-300">Top match · 94%</p>
-              <p className="mt-1 font-semibold">Sunset Ridge Loop</p>
-              <p className="mt-1 text-xs text-stone-400">Easy · 3.2 mi · mild weather</p>
-            </div>
           </div>
         </div>
 

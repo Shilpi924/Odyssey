@@ -56,6 +56,14 @@ const PIN_COLORS = [
 ];
 const getPinColor = (index) => PIN_COLORS[index % PIN_COLORS.length];
 
+const KNOWN_SEARCH_DESTINATIONS = [
+  { pattern: /\byosemite(?: national park)?\b/i, lat: 37.8651, lng: -119.5383, name: 'Yosemite National Park, CA' },
+];
+
+function knownSearchDestination(query) {
+  return KNOWN_SEARCH_DESTINATIONS.find(destination => destination.pattern.test(query || '')) || null;
+}
+
 // ─── Weather helpers ───────────────────────────────────────────────────────────
 
 function weatherEmoji(code) {
@@ -493,7 +501,7 @@ function SkeletonTrailCard() {
 
 // ─── AI Trail Card ─────────────────────────────────────────────────────────────
 
-function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetView, onAskAI, onSave, isSaved, onCompareToggle, isComparing, onStartHike, downloadProgress }) {
+function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onAskAI, onSave, isSaved, onCompareToggle, isComparing, onStartHike, downloadProgress, weather, searchMode }) {
   const d = getPinColor(index);
   const diffBadge = getDiff(trail.difficulty);
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
@@ -685,7 +693,7 @@ function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetView
             onClick={(e) => { e.stopPropagation(); onAskAI(trail); }}
             className="flex-1 text-xs py-2.5 bg-indigo-900/50 hover:bg-indigo-800/60 border border-indigo-500/30 text-indigo-300 rounded-xl transition-colors font-medium"
           >
-            💬 Ask AI
+            💬 Trail Guide
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onCompareToggle(trail); }}
@@ -1039,6 +1047,7 @@ function SafetyPanel({ userLocation, onClose, isOffline }) {
 function HikeSearchContent() {
   const searchParams = useSearchParams();
   const query = searchParams.get('q');
+  const mobileView = searchParams.get('view') || 'results';
 
   // ── Search state
   const [status, setStatus] = useState('idle');
@@ -1050,6 +1059,7 @@ function HikeSearchContent() {
   const [userLocation, setUserLocation] = useState(null);
   const [error, setError] = useState('');
   const [preferences, setPreferences] = useState({});
+  const [preferencesReady, setPreferencesReady] = useState(false);
   const [weather, setWeather] = useState(null);
 
   // ── Search input state
@@ -1406,10 +1416,21 @@ function HikeSearchContent() {
 
   // ── Load preferences
   useEffect(() => {
+    let next = {};
     const saved = localStorage.getItem('userPreferences');
+    if (saved) { try { next = JSON.parse(saved); } catch {} }
+    const difficulty = searchParams.get('difficulty');
+    const distance = searchParams.get('distance');
+    const accessibility = searchParams.get('accessibility');
+    const group = searchParams.get('group');
+    if (difficulty) next = { ...next, hiking: { ...(next.hiking || {}), difficulty: difficulty.split(',') } };
+    if (distance) next = { ...next, hiking: { ...(next.hiking || {}), length: distance } };
+    if (accessibility) next = { ...next, accessibility: accessibility.split(',').filter(Boolean) };
+    if (group) next = { ...next, groupDynamics: group };
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (saved) { try { setPreferences(JSON.parse(saved)); } catch {} }
-  }, []);
+    setPreferences(next);
+    setPreferencesReady(true);
+  }, [searchParams]);
 
   // ── Background Preloading of Hikes Near Me
   useEffect(() => {
@@ -1538,6 +1559,16 @@ function HikeSearchContent() {
     return null;
   }
 
+  async function getPlaceCoordinates(place) {
+    try {
+      const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(place)}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`);
+      const data = await response.json();
+      const location = data.results?.[0]?.geometry?.location;
+      if (location) return { lat: location.lat, lng: location.lng, name: data.results[0].formatted_address || place };
+    } catch {}
+    return null;
+  }
+
   const runSearch = useCallback(
     async (forceMode = null) => {
       setStatus('locating');
@@ -1549,9 +1580,17 @@ function HikeSearchContent() {
       setWeather(null);
 
       try {
-        const pos = await getLocation();
-        const { latitude: lat, longitude: lng } = pos.coords;
-        setUserLocation({ lat, lng });
+        const knownDestination = knownSearchDestination(searchQuery);
+        // A named place search should not wait for device GPS. GPS is only needed
+        // for "near me" searches and distance-from-me features.
+        const pos = knownDestination ? null : await getLocation();
+        const current = pos
+          ? { lat: pos.coords.latitude, lng: pos.coords.longitude }
+          : { lat: knownDestination.lat, lng: knownDestination.lng };
+        if (pos) setUserLocation(current);
+        const plannedDestination = knownDestination || (searchParams.get('plan') && searchQuery ? await getPlaceCoordinates(searchQuery) : null);
+        const lat = plannedDestination?.lat ?? current.lat;
+        const lng = plannedDestination?.lng ?? current.lng;
         setMapCenter({ lat, lng });
 
         // Check if we have matching preloaded data
@@ -1591,7 +1630,7 @@ function HikeSearchContent() {
           return;
         }
 
-        const locName = (await getLocationName(lat, lng)) || `${lat.toFixed(3)}, ${lng.toFixed(3)}`;
+        const locName = plannedDestination?.name || (await getLocationName(lat, lng)) || `${lat.toFixed(3)}, ${lng.toFixed(3)}`;
         setLocationName(locName);
         setStatus('searching');
 
@@ -1654,7 +1693,7 @@ function HikeSearchContent() {
         setStatus('error');
       }
     },
-    [searchQuery, searchMode, preferences, groupMode, groupDescription, searchRadius, preloadedData, preloadedKey, priceRange, preloadCardImages]
+    [searchQuery, searchMode, preferences, groupMode, groupDescription, searchRadius, preloadedData, preloadedKey, priceRange, preloadCardImages, searchParams]
   );
 
   // Filtering is derived data; memoization avoids a second render and stale results.
@@ -1706,7 +1745,7 @@ function HikeSearchContent() {
 
   // Auto-trigger when navigated from home
   useEffect(() => {
-    if (status !== 'idle') return;
+    if (status !== 'idle' || !preferencesReady) return;
     
     const cached = sessionStorage.getItem('odyssey_search_cache');
     if (cached) {
@@ -1730,7 +1769,7 @@ function HikeSearchContent() {
     }
 
     if (query && status === 'idle') runSearch();
-  }, [query]); // eslint-disable-line
+  }, [query, preferencesReady]); // eslint-disable-line
 
   const selectTrail = (idx) => {
     const next = idx === selectedIdx ? null : idx;
@@ -2170,8 +2209,14 @@ function HikeSearchContent() {
   const hikingPrefs = preferences?.hiking || {};
   const hasPrefs = Object.values(hikingPrefs).some((v) => (Array.isArray(v) ? v.length > 0 : !!v));
 
+  useEffect(() => {
+    if (mobileView === 'results') return;
+    const frame = window.requestAnimationFrame(() => document.getElementById('trail-map')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [mobileView, hasTrails]);
+
   return (
-    <div className="flex flex-col h-screen bg-slate-900 font-sans overflow-hidden">
+    <div className="flex flex-col min-h-screen md:h-screen bg-slate-900 font-sans overflow-visible md:overflow-hidden pb-24 md:pb-0">
  
       {/* ── Active Hike Recovery Modal ── */}
       {showRecoveryModal && recoveredHike && (
@@ -2304,11 +2349,6 @@ function HikeSearchContent() {
           </h1>
           {locationName && <p className="text-slate-400 text-xs truncate">{locationName}</p>}
         </div>
-        {hasPrefs && (
-          <Link href="/personalize" className="shrink-0 text-xs text-indigo-400 bg-indigo-900/30 border border-indigo-500/30 px-3 py-1.5 rounded-full">
-            ✨ Personalized
-          </Link>
-        )}
         <button 
           onClick={() => setIsSafetyMode(true)}
           className="shrink-0 text-xs text-rose-400 bg-rose-950/40 border border-rose-500/30 px-3 py-1.5 rounded-full transition-colors hover:bg-rose-950/60 font-bold"
@@ -2331,8 +2371,8 @@ function HikeSearchContent() {
 
       <div className="flex-1 flex flex-col md:flex-row min-h-0 relative w-full">
       {/* ── Map strip ── */}
-      {(hasTrails || userLocation) && (
-        <div className="shrink-0 h-[42vh] md:h-full md:w-1/2 relative z-10 border-b md:border-b-0 md:border-l border-slate-700 order-first md:order-last flex flex-col">
+      {(hasTrails || isHiking || mobileView !== 'results') && (
+        <div id="trail-map" className={`shrink-0 ${mobileView === 'results' ? 'h-[55vh]' : 'h-[calc(100vh-9rem)]'} md:h-full md:w-1/2 relative z-10 border-t md:border-t-0 md:border-l border-slate-700 order-last flex flex-col`}>
           {weather && (
              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[400] w-11/12 max-w-sm pointer-events-none">
                <EnvironmentalBanner weather={weather} />
@@ -2558,7 +2598,7 @@ function HikeSearchContent() {
       )}
 
       {/* ── Scrollable results / idle ── */}
-      <div className="flex-1 md:w-1/2 overflow-y-auto bg-slate-900 relative z-20 flex flex-col min-h-0 p-4">
+      <div className="flex-none md:flex-1 md:w-1/2 overflow-visible md:overflow-y-auto bg-slate-900 relative z-20 flex flex-col min-h-0 p-4 pb-28 md:pb-4 order-first">
         {isSafetyMode ? (
           <SafetyPanel 
             userLocation={userLocation} 
@@ -2615,18 +2655,13 @@ function HikeSearchContent() {
           <>
 
 
-            {/* Source badge + upgrade CTA */}
+            {/* Result context */}
             <div className="flex justify-between px-4 pt-4">
               <div className="flex flex-col gap-2 w-full">
                 {source === 'ai' && (
                   <div className="truncate text-xs text-slate-400">
                     Depending on your personalized profile, we have selected these {searchQuery.toLowerCase().includes('food') ? 'food options' : 'trails'} to best match your preferences.
                   </div>
-                )}
-                {source === 'fast' && (
-                  <button onClick={() => runSearch('ai')} className="text-xs text-indigo-400 underline hover:text-indigo-300 transition-colors w-fit">
-                    Personalize with AI →
-                  </button>
                 )}
               </div>
             </div>
@@ -2697,6 +2732,8 @@ function HikeSearchContent() {
                     isComparing={compareList.some(ct => ct.name === trail.name)}
                     onStartHike={startHike}
                     downloadProgress={downloadProgress?.id === `${trail.name}-${trail.lat}` ? downloadProgress : null}
+                    weather={weather}
+                    searchMode={searchMode}
                   />
                 ) : (
                   <FastTrailCard
@@ -2715,7 +2752,7 @@ function HikeSearchContent() {
                 )
               )}
               <p className="text-center text-slate-600 text-xs pb-4">
-                {source === 'ai' ? 'AI-analyzed result · Open-Meteo weather' : 'Quick result · location and filters'}
+                {source === 'ai' ? 'Detailed match · weather and preferences included' : 'Quick result · location and filters'}
               </p>
               
               {hasMore && (
@@ -2765,11 +2802,6 @@ function HikeSearchContent() {
                 rows={3}
                 className="w-full bg-slate-800 border border-slate-600 rounded-2xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors resize-none"
               />
-              {searchQuery && (
-                <p className="text-xs mt-1.5 text-slate-500">
-                  <span className="text-indigo-400">🤖 Smart routing enabled</span>
-                </p>
-              )}
             </div>
 
             {/* Quick Preferences */}
@@ -2806,44 +2838,22 @@ function HikeSearchContent() {
               </div>
             </div>
 
-            {/* Manual mode override & Radius */}
+            {/* Search radius and food price */}
             <div className="flex flex-col gap-6">
-              <div className="flex flex-col sm:flex-row gap-6">
-                <div className="flex-1">
-                  <p className="text-slate-500 text-xs mb-2">Search mode</p>
-                  <div className="flex gap-2">
-                    {[
-                      [null, '🎯 Auto'],
-                      ['ai', '🤖 Always AI'],
-                      ['fast', '⚡ Always Quick'],
-                    ].map(([mode, label]) => (
-                      <button
-                        key={String(mode)}
-                        onClick={() => setSearchMode(mode)}
-                        className={`flex-1 text-xs py-2 rounded-xl border transition-all font-medium ${
-                          searchMode === mode ? 'bg-slate-600 border-slate-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex-1">
-                  <p className="text-slate-500 text-xs mb-2">Radius</p>
-                  <div className="flex gap-2">
-                    {[5, 15, 25, 50].map((r) => (
-                      <button
-                        key={r}
-                        onClick={() => setSearchRadius(r)}
-                        className={`flex-1 text-xs py-2 rounded-xl border transition-all font-medium ${
-                          searchRadius === r ? 'bg-slate-600 border-slate-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
-                        }`}
-                      >
-                        {r} mi
-                      </button>
-                    ))}
-                  </div>
+              <div>
+                <p className="text-slate-500 text-xs mb-2">Radius</p>
+                <div className="flex gap-2">
+                  {[5, 15, 25, 50].map((r) => (
+                    <button
+                      key={r}
+                      onClick={() => setSearchRadius(r)}
+                      className={`flex-1 text-xs py-2 rounded-xl border transition-all font-medium ${
+                        searchRadius === r ? 'bg-slate-600 border-slate-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
+                      }`}
+                    >
+                      {r} mi
+                    </button>
+                  ))}
                 </div>
               </div>
               <div>
@@ -2906,7 +2916,7 @@ function HikeSearchContent() {
                     : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
                 }`}
               >
-                🤖 AI Search
+                Detailed Search
               </button>
             </div>
 
@@ -2915,7 +2925,7 @@ function HikeSearchContent() {
               disabled={isOffline}
               className="w-full py-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 disabled:from-slate-600 disabled:to-slate-700 text-white font-bold rounded-2xl shadow-lg transition-all duration-300 text-base"
             >
-              {isOffline ? 'Offline - Connect to search' : searchMode === 'ai' ? 'AI Search →' : 'Fast Search →'}
+              {isOffline ? 'Offline - Connect to search' : searchMode === 'ai' ? 'Detailed Search →' : 'Quick Search →'}
             </button>
           </div>
         )}
@@ -2925,7 +2935,7 @@ function HikeSearchContent() {
 
       {/* ── Refinement bar — sticky bottom (AI-mode only) ── */}
       {hasTrails && !isOffline && (
-        <div className="absolute bottom-6 left-4 right-4 z-50 bg-slate-900/80 backdrop-blur-xl border border-slate-700/60 shadow-2xl rounded-2xl px-3 py-3 flex items-center gap-2">
+        <div className="fixed md:absolute bottom-24 md:bottom-6 left-4 right-4 md:left-4 md:right-4 z-40 bg-slate-900/80 backdrop-blur-xl border border-slate-700/60 shadow-2xl rounded-2xl px-3 py-3 flex items-center gap-2 md:max-w-[calc(50%-2rem)]">
           
           {compareList.length > 0 && (
             <button
