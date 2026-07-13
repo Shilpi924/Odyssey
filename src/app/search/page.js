@@ -788,6 +788,14 @@ function FastTrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetVi
               </span>
             )}
           </div>
+          {trail.sourceAttribution && (
+            <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
+              <span>{trail.sourceAttribution}</span>
+              {trail.geometrySource && <span className="text-emerald-400">Route geometry: OpenStreetMap</span>}
+              {trail.access?.permitRequired && <span className="text-amber-300">Permit required</span>}
+              {trail.access?.status && <span>Access: {trail.access.status}</span>}
+            </div>
+          )}
         </div>
         <AnimatePresence>
           {isSelected && (
@@ -1061,6 +1069,8 @@ function HikeSearchContent() {
   const [preferences, setPreferences] = useState({});
   const [preferencesReady, setPreferencesReady] = useState(false);
   const [weather, setWeather] = useState(null);
+  const [parkAlerts, setParkAlerts] = useState([]);
+  const [alertsFetchedAt, setAlertsFetchedAt] = useState(null);
 
   // ── Search input state
   const [searchQuery, setSearchQuery] = useState(query && query !== 'hikes' ? query : '');
@@ -1578,6 +1588,8 @@ function HikeSearchContent() {
       setError('');
       setSelectedIdx(null);
       setWeather(null);
+      setParkAlerts([]);
+      setAlertsFetchedAt(null);
 
       try {
         const knownDestination = knownSearchDestination(searchQuery);
@@ -1677,13 +1689,24 @@ function HikeSearchContent() {
         setTrails(data.trails || []);
         setWeather(data.weather || null);
         setSource(data.source || 'fast');
+        setStatus('done');
+
+        if (data.entity?.id === 'nps-yose' || data.entity?.parkId === 'nps-yose') {
+          try {
+            const alertsResponse = await fetch('/api/park-alerts?parkCode=yose');
+            const alertsData = await alertsResponse.json();
+            if (alertsResponse.ok && alertsData.available) {
+              setParkAlerts(alertsData.alerts || []);
+              setAlertsFetchedAt(alertsData.fetchedAt || null);
+            }
+          } catch {}
+        }
 
         // Preload card images in background
         if (data.trails && data.trails.length > 0) {
           preloadCardImages(data.trails);
         }
 
-        setStatus('done');
       } catch (err) {
         setError(
           err.code === 1
@@ -2667,6 +2690,21 @@ function HikeSearchContent() {
             </div>
 
             {/* Quick Filters */}
+            {parkAlerts.length > 0 && (
+              <div className="mx-4 mt-4 rounded-2xl border border-amber-500/30 bg-amber-950/30 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-amber-200">Current National Park Service alerts</p>
+                  {alertsFetchedAt && <span className="text-[10px] text-amber-200/50">Updated {new Date(alertsFetchedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>}
+                </div>
+                <div className="mt-2 flex flex-col gap-2">
+                  {parkAlerts.slice(0, 3).map(alert => (
+                    <a key={alert.id} href={alert.url} target="_blank" rel="noreferrer" className="text-xs text-amber-100/80 hover:text-amber-100">
+                      <span className="font-semibold">{alert.category}:</span> {alert.title}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
             <QuickFilters 
               trails={trails} 
               activeFilters={activeFilters}

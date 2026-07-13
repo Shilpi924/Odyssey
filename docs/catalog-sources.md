@@ -27,3 +27,11 @@ Use for route geometry, paths, trailheads, and map context. OSM data is licensed
 5. Replace the search envelope with the official NPS MultiPolygon before geographic membership is described as authoritative.
 6. Run `auditCatalog()` in ingestion and CI before publishing catalog changes.
 
+## Phase 9 live enrichment
+
+- Geometry-enabled records retain their OSM relation ID and ODbL attribution.
+- `/api/trails/[id]/geometry` retrieves route members on demand and calculates route distance from the returned geometry.
+- Elevation is sampled server-side only when requested and uses `GOOGLE_MAPS_SERVER_API_KEY`.
+- `/api/park-alerts` retrieves NPS alerts with `NPS_API_KEY`, caches them briefly, and fails without blocking trail results.
+- `/api/parks/[code]/boundary` retrieves the official NPS park boundary as GeoJSON for PostGIS ingestion and precise membership checks.
+- Provider failures must return explicit unavailable/error states; they must never silently become official facts.

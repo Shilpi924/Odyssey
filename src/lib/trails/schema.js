@@ -87,6 +87,7 @@ export function normalizeTrail(input = {}) {
       attribution: input.source?.attribution ?? input.attribution ?? null,
       importedAt: input.source?.importedAt ?? input.importedAt ?? null,
       lastVerifiedAt: input.source?.lastVerifiedAt ?? input.lastVerifiedAt ?? null,
+      geometry: input.source?.geometry ?? input.geometrySource ?? null,
     },
   };
 }
@@ -111,4 +112,3 @@ export function validateTrail(input) {
 
   return { valid: errors.length === 0, errors, trail };
 }
-

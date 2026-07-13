@@ -26,14 +26,21 @@ test.describe('Search Page Flow', () => {
     await page.route('**/api/fast-search', route => route.fulfill({
       contentType: 'application/json',
       body: JSON.stringify({
-        source: 'fast', weather: null,
-        trails: [{ name: 'Half Dome via the John Muir Trail', lat: 37.7459, lng: -119.5332, distance: '2.5', difficulty: 'Strenuous', length: '14–16 miles', rating: 4.9, userRatingsTotal: 1000, features: ['Summit', 'Scenic'] }],
+        source: 'catalog', weather: null, entity: { type: 'park', id: 'nps-yose' },
+        trails: [{ name: 'Half Dome via the John Muir Trail', lat: 37.7459, lng: -119.5332, distance: '2.5', difficulty: 'Strenuous', length: '16.2 miles', rating: null, userRatingsTotal: 0, features: ['Summit', 'Scenic'], sourceAttribution: 'Source: National Park Service', geometrySource: { provider: 'osm' }, access: { status: 'Unknown', permitRequired: true } }],
       }),
+    }));
+    await page.route('**/api/park-alerts?parkCode=yose', route => route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({ available: true, fetchedAt: '2026-07-13T07:00:00.000Z', alerts: [{ id: 'alert-1', category: 'Park Closure', title: 'Seasonal trail closure', url: 'https://www.nps.gov/yose/' }] }),
     }));
 
     await page.goto('/search?q=Yosemite&difficulty=Strenuous', { waitUntil: 'domcontentloaded' });
     const result = page.getByRole('heading', { name: 'Half Dome via the John Muir Trail', level: 3 });
     await expect(result).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Current National Park Service alerts')).toBeVisible();
+    await expect(page.getByText('Route geometry: OpenStreetMap')).toBeVisible();
+    await expect(page.getByText('Permit required')).toBeVisible();
     await result.click();
     await expect(page.getByRole('button', { name: '🚶 Start Hike' }).last()).toBeVisible();
     await expect(page.getByRole('button', { name: '🗺️ Map' }).last()).toBeVisible();

@@ -41,5 +41,9 @@ describe('structured catalog search', () => {
     ]));
     expect(search.results.every(result => result.trail.difficulty === 'Easy' && result.trail.features.includes('Waterfall'))).toBe(true);
   });
-});
 
+  it('publishes route provenance for geometry-enabled trails', () => {
+    const result = searchCatalog({ query: 'Half Dome' }).results[0].trail;
+    expect(result.source.geometry).toMatchObject({ provider: 'osm', relationId: 16315186, license: 'ODbL 1.0' });
+  });
+});

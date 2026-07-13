@@ -118,6 +118,8 @@ export function toLegacySearchResult(trail, score, origin) {
     access: trail.access,
     sourceAttribution: trail.source.attribution,
     sourceUrl: trail.source.sourceUrl,
+    geometrySource: trail.source.geometry,
+    geometryUrl: trail.source.geometry ? `/api/trails/${trail.id}/geometry` : null,
     relevanceScore: score,
   };
 }
@@ -129,4 +131,3 @@ function distanceMiles(lat1, lon1, lat2, lon2) {
   const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
   return radius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
-

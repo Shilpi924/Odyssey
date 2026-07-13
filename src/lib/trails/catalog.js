@@ -27,8 +27,16 @@ export function getParkById(parkId) {
   return PARKS.find(park => park.id === parkId) || null;
 }
 
+export function getParkByCode(parkCode) {
+  return PARKS.find(park => park.parkCode === parkCode) || null;
+}
+
 export function getTrailsByParkId(parkId) {
   return TRAILS.filter(trail => trail.geography.parkId === parkId);
+}
+
+export function getTrailById(trailId) {
+  return TRAILS.find(trail => trail.id === trailId) || null;
 }
 
 export function getParksContainingPoint(point) {
@@ -51,4 +59,3 @@ export function auditCatalog() {
   }
   return { valid: errors.length === 0, errors, parkCount: PARKS.length, trailCount: TRAILS.length };
 }
-
