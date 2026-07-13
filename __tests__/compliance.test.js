@@ -47,6 +47,19 @@ describe('provider and licensing guardrails', () => {
     expect(readFileSync(join(root, 'public/THIRD_PARTY_NOTICES.txt'), 'utf8')).toBe(readFileSync(join(root, 'THIRD_PARTY_NOTICES.md'), 'utf8'));
   });
 
+  it('keeps California-first privacy and launch gates explicit', () => {
+    const privacy = readFileSync(join(root, 'src/app/legal/privacy/page.js'), 'utf8');
+    const terms = readFileSync(join(root, 'src/app/legal/terms/page.js'), 'utf8');
+    const readiness = readFileSync(join(root, 'docs/legal/US_CALIFORNIA_LAUNCH_READINESS.md'), 'utf8');
+    for (const disclosure of ['Do Not Track', 'Global Privacy Control', 'Access, correction, and deletion', 'Changes to this notice']) {
+      expect(privacy).toContain(disclosure);
+    }
+    expect(terms).toContain('not directed to children under 13');
+    expect(readiness).toContain('Strongly recommended counsel review');
+    expect(readiness).toContain('There is no general rule that a software publisher must hire an attorney');
+    expect(readiness).toContain('Required engineering and operator decisions before production');
+  });
+
   it('keeps secrets out of the browser-facing environment template', () => {
     const template = readFileSync(join(root, '.env.example'), 'utf8');
     expect(template).not.toContain('NEXT_PUBLIC_GOOGLE_MAPS_API_KEY');
