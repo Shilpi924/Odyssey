@@ -11,7 +11,12 @@ describe('Phase 2 Yosemite trail catalog', () => {
     const audit = auditCatalog();
     expect(audit.valid).toBe(true);
     expect(audit.parkCount).toBe(1);
-    expect(audit.trailCount).toBeGreaterThanOrEqual(10);
+    expect(audit.trailCount).toBeGreaterThanOrEqual(40);
+  });
+
+  it('covers Yosemite regions beyond the Valley', () => {
+    const regions = new Set(getTrailsByParkId('nps-yose').map(trail => trail.geography.region));
+    expect([...regions]).toEqual(expect.arrayContaining(['Yosemite Valley', 'Glacier Point Road', 'Tuolumne Meadows', 'Mariposa Grove', 'Hetch Hetchy', 'Wawona']));
   });
 
   it('returns famous and family-friendly trails by park relationship', () => {
@@ -30,4 +35,3 @@ describe('Phase 2 Yosemite trail catalog', () => {
     expect(getCatalogAttributions(getTrailsByParkId('nps-yose'))).toContain('Source: National Park Service');
   });
 });
-

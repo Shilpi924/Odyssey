@@ -1,10 +1,11 @@
 import { YOSEMITE_PARK } from '@/data/catalog/parks/yosemite';
 import { YOSEMITE_TRAILS } from '@/data/catalog/trails/yosemite';
+import { YOSEMITE_EXPANDED_TRAILS } from '@/data/catalog/trails/yosemite-expanded';
 import { getCatalogSource } from '@/data/catalog/sources';
 import { normalizeTrail, validateTrail } from './schema';
 
 const PARKS = [YOSEMITE_PARK];
-const TRAILS = YOSEMITE_TRAILS.map(normalizeTrail);
+const TRAILS = [...YOSEMITE_TRAILS, ...YOSEMITE_EXPANDED_TRAILS].map(normalizeTrail);
 
 function pointInRing(point, ring) {
   let inside = false;

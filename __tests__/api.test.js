@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from 'vitest';
-import { buildUserContext, distanceMiles } from '../src/app/api/smart-search/route.js';
+import { buildUserContext, distanceMiles, POST as smartSearch } from '../src/app/api/smart-search/route.js';
 import { buildHikingSearchQuery, POST as fastSearch } from '../src/app/api/fast-search/route.js';
 
 describe('Smart Search API Helpers', () => {
@@ -33,6 +33,14 @@ describe('Smart Search API Helpers', () => {
       expect(response.status).toBe(200);
       expect(data.source).toBe('catalog');
       expect(data.trails.map(trail => trail.placeId)).toEqual(expect.arrayContaining(['half-dome-jmt', 'el-capitan-trail']));
+    });
+  });
+
+  describe('smart search request validation', () => {
+    it('returns 400 for an empty JSON body', async () => {
+      const response = await smartSearch(new Request('http://localhost/api/smart-search', { method: 'POST' }));
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: 'Invalid JSON body' });
     });
   });
   describe('distanceMiles', () => {

@@ -88,6 +88,7 @@ export function normalizeTrail(input = {}) {
       importedAt: input.source?.importedAt ?? input.importedAt ?? null,
       lastVerifiedAt: input.source?.lastVerifiedAt ?? input.lastVerifiedAt ?? null,
       geometry: input.source?.geometry ?? input.geometrySource ?? null,
+      difficultyMethod: input.source?.difficultyMethod ?? input.difficultyMethod ?? null,
     },
   };
 }

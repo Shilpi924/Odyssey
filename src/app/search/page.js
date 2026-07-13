@@ -57,6 +57,11 @@ const PIN_COLORS = [
 const getPinColor = (index) => PIN_COLORS[index % PIN_COLORS.length];
 
 const KNOWN_SEARCH_DESTINATIONS = [
+  { pattern: /\btuolumne meadows\b/i, lat: 37.8735, lng: -119.3507, name: 'Tuolumne Meadows, Yosemite National Park' },
+  { pattern: /\bhetch hetchy\b/i, lat: 37.9463, lng: -119.7870, name: 'Hetch Hetchy, Yosemite National Park' },
+  { pattern: /\bmariposa grove\b/i, lat: 37.5063, lng: -119.5988, name: 'Mariposa Grove, Yosemite National Park' },
+  { pattern: /\bglacier point\b/i, lat: 37.7275, lng: -119.5738, name: 'Glacier Point, Yosemite National Park' },
+  { pattern: /\bwawona\b/i, lat: 37.5362, lng: -119.6552, name: 'Wawona, Yosemite National Park' },
   { pattern: /\byosemite(?: national park)?\b/i, lat: 37.8651, lng: -119.5383, name: 'Yosemite National Park, CA' },
 ];
 

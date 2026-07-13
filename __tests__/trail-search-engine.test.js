@@ -6,6 +6,7 @@ describe('catalog entity resolution', () => {
   it('resolves parks, regions, exact trails, and aliases', () => {
     expect(resolveSearchEntity('strenuous hikes in Yosemite')).toMatchObject({ type: 'park', id: 'nps-yose' });
     expect(resolveSearchEntity('trails near Yosemite Valley')).toMatchObject({ type: 'region', id: 'yosemite-valley' });
+    expect(resolveSearchEntity('hikes in Tuolumne Meadows')).toMatchObject({ type: 'region', id: 'tuolumne-meadows' });
     expect(resolveSearchEntity('Half Dome')).toMatchObject({ type: 'trail', id: 'half-dome-jmt' });
     expect(resolveSearchEntity('El Capitan')).toMatchObject({ type: 'trail', id: 'el-capitan-trail' });
   });
@@ -45,5 +46,11 @@ describe('structured catalog search', () => {
   it('publishes route provenance for geometry-enabled trails', () => {
     const result = searchCatalog({ query: 'Half Dome' }).results[0].trail;
     expect(result.source.geometry).toMatchObject({ provider: 'osm', relationId: 16315186, license: 'ODbL 1.0' });
+  });
+
+  it('keeps region searches inside the selected Yosemite region', () => {
+    const search = searchCatalog({ query: 'hikes in Hetch Hetchy' });
+    expect(search.results.length).toBeGreaterThan(0);
+    expect(search.results.every(result => result.trail.geography.region === 'Hetch Hetchy')).toBe(true);
   });
 });

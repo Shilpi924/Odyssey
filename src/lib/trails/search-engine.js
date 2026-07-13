@@ -1,8 +1,7 @@
 import { getParkById, getTrailsByParkId } from './catalog';
 
-const ENTITY_INDEX = [
+const BASE_ENTITY_INDEX = [
   { type: 'park', id: 'nps-yose', name: 'Yosemite National Park', aliases: ['yosemite', 'yosemite national park', 'yosemite np'] },
-  { type: 'region', id: 'yosemite-valley', parkId: 'nps-yose', name: 'Yosemite Valley', aliases: ['yosemite valley', 'the valley'] },
 ];
 
 function terms(value) {
@@ -24,7 +23,9 @@ export function resolveSearchEntity(query) {
   );
   if (trailMatch) return { type: 'trail', id: trailMatch.id, name: trailMatch.name, parkId: trailMatch.geography.parkId, confidence: 1 };
 
-  const entityMatch = ENTITY_INDEX
+  const regions = [...new Set(parkTrails.map(trail => trail.geography.region).filter(Boolean))]
+    .map(name => ({ type: 'region', id: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), parkId: 'nps-yose', name, aliases: [name.toLowerCase()] }));
+  const entityMatch = [...BASE_ENTITY_INDEX, ...regions]
     .map(entity => ({
       ...entity,
       matchedAlias: entity.aliases.find(alias => normalized.includes(alias)),
@@ -86,7 +87,8 @@ export function searchCatalog({ query, preferences = {}, limit = 10 }) {
   const parkId = entity.type === 'park' ? entity.id : entity.parkId;
   const park = getParkById(parkId);
   const filters = deriveSearchFilters(query, preferences);
-  const candidates = getTrailsByParkId(parkId);
+  const candidates = getTrailsByParkId(parkId)
+    .filter(trail => entity.type !== 'region' || trail.geography.region === entity.name);
   const results = candidates
     .filter(trail => trailMatchesFilters(trail, { ...filters, excludeStatuses: ['Closed'] }))
     .map(trail => ({ trail, score: scoreTrail(trail, { query, entity, filters }) }))

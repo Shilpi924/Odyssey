@@ -417,8 +417,13 @@ const graph = builder.compile();
 // ─── Next.js Route ────────────────────────────────────────────────────────────
 
 export async function POST(request) {
+  let body;
   try {
-    const body = await request.json();
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+  try {
     if (!body.lat || !body.lng) return NextResponse.json({ error: 'Location required' }, { status: 400 });
 
     const finalState = await graph.invoke({

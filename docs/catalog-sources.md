@@ -2,6 +2,8 @@
 
 Phase 2 begins with a Yosemite pilot. Every imported field must retain provider, external identifier, source URL, license, attribution, and timestamps when available.
 
+The Phase 9 catalog contains 43 NPS-sourced routes across Yosemite Valley, Glacier Point Road, Tuolumne Meadows, Mariposa Grove, Hetch Hetchy, and Wawona. When NPS publishes distance and elevation but not one of Odyssey's canonical difficulty labels, the record uses `odyssey-distance-elevation-v1` and exposes that method in provenance.
+
 ## Approved sources
 
 ### U.S. National Park Service
