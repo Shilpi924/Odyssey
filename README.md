@@ -7,7 +7,7 @@ Odyssey is an early-stage trail discovery and local GPS tool built around explic
 - Verified Yosemite trail search with difficulty and feature filters
 - National Park Service alerts and source links
 - OpenStreetMap trail relation geometry where a catalog record identifies it
-- Interactive MapLibre map with visible OpenStreetMap attribution
+- Interactive MapLibre map using a Stadia Maps vector basemap with visible attribution
 - Locally saved trail facts and on-device GPS recording
 - Optional authenticated preference storage
 - Optional Anthropic-powered questions and refinement over the supplied trail set
@@ -42,6 +42,8 @@ NPS_API_KEY=your_nps_api_key
 
 Optional account, database, and AI variables are documented in `.env.example`. Secret values must remain server-only and `.env.local` must never be committed.
 
+Local map development uses Stadia Maps without an API key. Before production, upgrade to a commercial Stadia plan and add the production domain in Stadia’s authentication settings. `NEXT_PUBLIC_MAP_STYLE_URL` is an optional public style override, not a secret.
+
 ## Verification
 
 ```bash
@@ -65,4 +67,4 @@ npm run licenses
 - Public app disclosures: `/legal/terms`, `/legal/privacy`, `/legal/data-sources`, `/legal/licenses`, and `/legal/copyright`
 - Current original Odyssey code is proprietary except where stated otherwise. Earlier revisions released under MIT remain subject to those earlier grants. See [`LICENSE`](LICENSE).
 
-Before substantial commercial traffic, replace the public OpenStreetMap Standard Tile endpoint with self-hosting or a suitable commercial provider, complete a jurisdiction-specific legal review, designate a dedicated legal/privacy contact, and implement moderation before enabling community uploads.
+The public OpenStreetMap Standard Tile endpoint is not used by the interactive map. Before production, activate a commercial Stadia plan with domain authentication, complete a jurisdiction-specific legal review, designate a dedicated legal/privacy contact, and implement moderation before enabling community uploads.

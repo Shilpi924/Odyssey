@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { db } from '@/lib/db';
-import { OSM_MAP_STYLE } from '@/lib/map-style';
-import Map, { Marker, Source, Layer } from 'react-map-gl/maplibre';
+import { MAP_CONFIG } from '@/lib/map-style';
+import Map, { AttributionControl, Marker, Source, Layer } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import maplibregl from 'maplibre-gl';
 import { motion } from 'framer-motion';
@@ -66,6 +66,8 @@ export default function SavedHikesPage() {
   const [selectedIdx, setSelectedIdx] = useState(null);
   const [mapCenter, setMapCenter] = useState(null);
   const [mapZoom, setMapZoom] = useState(12);
+  const [mapError, setMapError] = useState(false);
+  const [mapRevision, setMapRevision] = useState(0);
   const mapRef = useRef(null);
   const cardRefs = useRef([]);
 
@@ -279,16 +281,24 @@ export default function SavedHikesPage() {
         {savedHikes.length > 0 && (
           <div className="shrink-0 h-[45vh] md:h-full md:w-1/2 relative z-10 border-t md:border-t-0 md:border-l border-slate-700 order-first md:order-last flex flex-col">
             <Map
+              key={`saved-map-${mapRevision}`}
               ref={mapRef}
               initialViewState={{
                 longitude: mapCenter?.lng || -122.4194,
                 latitude: mapCenter?.lat || 37.7749,
                 zoom: mapZoom
               }}
-              mapStyle={OSM_MAP_STYLE}
+              mapStyle={MAP_CONFIG.styleUrl}
+              attributionControl={false}
               style={{ width: '100%', height: '100%' }}
               onZoom={(e) => setMapZoom(e.viewState.zoom)}
+              onLoad={() => setMapError(false)}
+              onError={(event) => {
+                console.error('Map provider error:', event.error || event);
+                setMapError(true);
+              }}
             >
+              <AttributionControl compact={false} position="bottom-right" />
               {userLoc && <UserPin position={userLoc} />}
 
               {savedHikes.map((hike, idx) =>
@@ -333,6 +343,13 @@ export default function SavedHikesPage() {
                 <button onClick={fitAllHikes} title="Show all saved hikes" className="w-10 h-10 bg-slate-900/90 backdrop-blur border border-slate-600 rounded-xl text-white text-base flex items-center justify-center shadow-lg hover:bg-slate-700 transition-colors">🔭</button>
               </div>
             </Map>
+            {mapError && (
+              <div role="status" className="absolute inset-x-4 top-4 z-40 rounded-xl border border-amber-400/40 bg-slate-950/95 p-4 text-sm text-amber-100 shadow-xl">
+                <p className="font-semibold">Basemap temporarily unavailable</p>
+                <p className="mt-1 text-xs text-slate-300">Your saved trail facts are still available. Do not rely on this map for navigation.</p>
+                <button type="button" onClick={() => { setMapError(false); setMapRevision(revision => revision + 1); }} className="mt-3 rounded-lg border border-amber-300/40 px-3 py-1.5 text-xs font-semibold hover:bg-amber-300/10">Retry map</button>
+              </div>
+            )}
           </div>
         )}
       </div>

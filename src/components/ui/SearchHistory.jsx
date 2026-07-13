@@ -53,7 +53,7 @@ export default function SearchHistory({ onSelect, onClear }) {
 
 export function addToHistory(query) {
   if (!query || query.trim() === '') return;
-  
+
   const saved = localStorage.getItem('odyssey_search_history');
   let history = [];
   if (saved) {
@@ -61,7 +61,7 @@ export function addToHistory(query) {
       history = JSON.parse(saved);
     } catch {}
   }
-  
+
   const newHistory = [query, ...history.filter(h => h !== query)].slice(0, MAX_HISTORY);
   localStorage.setItem('odyssey_search_history', JSON.stringify(newHistory));
 }

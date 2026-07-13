@@ -1,9 +1,9 @@
 import { defaultCache } from '@serwist/next/worker';
 import { NetworkOnly, Serwist } from 'serwist';
 
-const customCaching = [
+const runtimeCaching = [
   {
-    matcher: ({ url }) => url.hostname === 'tile.openstreetmap.org',
+    matcher: ({ url }) => url.hostname === 'stadiamaps.com' || url.hostname.endsWith('.stadiamaps.com'),
     handler: new NetworkOnly(),
   },
   ...defaultCache,
@@ -14,7 +14,7 @@ const serwist = new Serwist({
   skipWaiting: true,
   clientsClaim: true,
   navigationPreload: true,
-  runtimeCaching: customCaching,
+  runtimeCaching,
 });
 
 serwist.addEventListeners();

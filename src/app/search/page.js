@@ -3,11 +3,11 @@
 import { useState, useEffect, useRef, Suspense, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import Map, { Marker, Source, Layer } from 'react-map-gl/maplibre';
+import Map, { AttributionControl, Marker, Source, Layer } from 'react-map-gl/maplibre';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { db } from '@/lib/db';
-import { OSM_MAP_STYLE } from '@/lib/map-style';
+import { MAP_CONFIG } from '@/lib/map-style';
 import { motion, AnimatePresence } from 'framer-motion';
 import TrailCardSkeleton from '@/components/ui/TrailCardSkeleton';
 import QuickFilters from '@/components/ui/QuickFilters';
@@ -910,6 +910,8 @@ function HikeSearchContent() {
   const [mapType, setMapType] = useState('roadmap');
   const [mapZoom, setMapZoom] = useState(12);
   const [showTraffic, setShowTraffic] = useState(false);
+  const [mapError, setMapError] = useState(false);
+  const [mapRevision, setMapRevision] = useState(0);
 
   // ── Refinement state
   const [conversation, setConversation] = useState([]);
@@ -2092,6 +2094,7 @@ function HikeSearchContent() {
       {(hasTrails || isHiking || mobileView !== 'results') && (
         <div id="trail-map" className={`shrink-0 ${mobileView === 'results' ? 'h-[55vh]' : 'h-[calc(100vh-9rem)]'} md:h-full md:w-1/2 relative z-10 border-t md:border-t-0 md:border-l border-slate-700 order-last flex flex-col`}>
             <Map
+              key={`trail-map-${mapRevision}`}
               ref={mapRef}
               initialViewState={{
                 longitude: mapCenter?.lng || -122.4194,
@@ -2100,18 +2103,18 @@ function HikeSearchContent() {
                 pitch: 0,
                 bearing: 0
               }}
-              mapStyle={OSM_MAP_STYLE}
+              mapStyle={MAP_CONFIG.styleUrl}
+              attributionControl={false}
               style={{ width: '100%', height: '100%' }}
               minZoom={4}
               onZoom={(e) => setMapZoom(e.viewState.zoom)}
+              onLoad={() => setMapError(false)}
               onError={(e) => {
-                if (e.error?.message?.includes('404')) {
-                  console.warn('MapLibre expected 404 (missing tile level):', e.error.message);
-                } else {
-                  console.error('Map error:', e);
-                }
+                console.error('Map provider error:', e.error || e);
+                setMapError(true);
               }}
             >
+              <AttributionControl compact={false} position="bottom-right" />
               {userLocation && <UserPin position={userLocation} heading={deviceHeading} />}
 
               {/* Live Tracked Path */}
@@ -2190,6 +2193,14 @@ function HikeSearchContent() {
                   )}
               </div>
             </Map>
+
+          {mapError && (
+            <div role="status" className="absolute inset-x-4 top-4 z-40 rounded-xl border border-amber-400/40 bg-slate-950/95 p-4 text-sm text-amber-100 shadow-xl">
+              <p className="font-semibold">Basemap temporarily unavailable</p>
+              <p className="mt-1 text-xs text-slate-300">Verified trail facts remain available. Do not rely on this map for navigation.</p>
+              <button type="button" onClick={() => { setMapError(false); setMapRevision(revision => revision + 1); }} className="mt-3 rounded-lg border border-amber-300/40 px-3 py-1.5 text-xs font-semibold hover:bg-amber-300/10">Retry map</button>
+            </div>
+          )}
 
           {/* Active Hike Overlay */}
           {isHiking && activeHike && (

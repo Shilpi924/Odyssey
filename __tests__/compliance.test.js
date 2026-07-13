@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { OSM_MAP_STYLE } from '../src/lib/map-style.js';
+import { MAP_CONFIG } from '../src/lib/map-style.js';
 
 const root = resolve(import.meta.dirname, '..');
 
@@ -28,12 +28,14 @@ describe('provider and licensing guardrails', () => {
     ]) expect(runtime).not.toContain(forbidden);
   });
 
-  it('uses attributed OpenStreetMap tiles and keeps them network-only', () => {
-    expect(OSM_MAP_STYLE.sources.osm.tiles).toEqual(['https://tile.openstreetmap.org/{z}/{x}/{y}.png']);
-    expect(OSM_MAP_STYLE.sources.osm.attribution).toContain('OpenStreetMap contributors');
+  it('uses the hosted Stadia style without a public OSM tile fallback', () => {
+    expect(MAP_CONFIG).toMatchObject({ provider: 'stadia', providerName: 'Stadia Maps' });
+    expect(MAP_CONFIG.styleUrl).toBe('https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json');
     const worker = readFileSync(join(root, 'src/app/sw.js'), 'utf8');
-    expect(worker).toContain("url.hostname === 'tile.openstreetmap.org'");
+    expect(worker).not.toContain('tile.openstreetmap.org');
+    expect(worker).toContain("url.hostname.endsWith('.stadiamaps.com')");
     expect(worker).toContain('new NetworkOnly()');
+    expect(readFileSync(join(root, 'src/lib/map-style.js'), 'utf8')).not.toContain('tile.openstreetmap.org');
   });
 
   it('ships public legal pages and generated third-party notices', () => {
