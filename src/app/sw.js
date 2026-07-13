@@ -1,24 +1,10 @@
 import { defaultCache } from '@serwist/next/worker';
-import { Serwist } from 'serwist';
-import { BackgroundSyncPlugin } from '@serwist/background-sync';
-
-const bgSyncPlugin = new BackgroundSyncPlugin('hike-sync-queue', {
-  maxRetentionTime: 24 * 60, // Retry for up to 24 Hours
-});
+import { NetworkOnly, Serwist } from 'serwist';
 
 const customCaching = [
   {
-    matcher: /\/api\/sync-hike/,
-    handler: 'NetworkOnly',
-    options: {
-      backgroundSync: {
-        name: 'hike-sync-queue',
-        options: {
-          maxRetentionTime: 24 * 60,
-        },
-      },
-      plugins: [bgSyncPlugin]
-    },
+    matcher: ({ url }) => url.hostname === 'tile.openstreetmap.org',
+    handler: new NetworkOnly(),
   },
   ...defaultCache,
 ];

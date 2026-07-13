@@ -34,6 +34,30 @@ describe('Smart Search API Helpers', () => {
       expect(data.source).toBe('catalog');
       expect(data.trails.map(trail => trail.placeId)).toEqual(expect.arrayContaining(['half-dome-jmt', 'el-capitan-trail']));
     });
+
+    it('returns an honest empty coverage response outside the catalog', async () => {
+      const response = await fastSearch(new Request('http://localhost/api/fast-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat: 37.2, lng: -112.9, query: 'Zion National Park' }),
+      }));
+      const data = await response.json();
+      expect(response.status).toBe(200);
+      expect(data.trails).toEqual([]);
+      expect(data.coverage).toMatchObject({ verified: false, supportedParkIds: ['nps-yose'] });
+      expect(data.hasMore).toBe(false);
+    });
+
+    it('resolves near-me searches only when coordinates fall in verified coverage', async () => {
+      const response = await fastSearch(new Request('http://localhost/api/fast-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat: 37.75, lng: -119.58, query: 'near me' }),
+      }));
+      const data = await response.json();
+      expect(data.coverage.verified).toBe(true);
+      expect(data.trails.length).toBeGreaterThan(0);
+    });
   });
 
   describe('smart search request validation', () => {
@@ -41,6 +65,20 @@ describe('Smart Search API Helpers', () => {
       const response = await smartSearch(new Request('http://localhost/api/smart-search', { method: 'POST' }));
       expect(response.status).toBe(400);
       expect(await response.json()).toEqual({ error: 'Invalid JSON body' });
+    });
+
+    it('uses the same sourced catalog for detailed requests', async () => {
+      const response = await smartSearch(new Request('http://localhost/api/smart-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat: 37.8, lng: -119.5, naturalLanguageQuery: 'strenuous hikes in Yosemite', preferences: { hiking: { difficulty: ['Strenuous'] } } }),
+      }));
+      const data = await response.json();
+      expect(data.source).toBe('catalog');
+      expect(data._routedBy).toBe('verifiedCatalog');
+      expect(data.weather).toBeNull();
+      expect(data.trails.map(trail => trail.placeId)).toContain('half-dome-jmt');
+      expect(data.trails.every(trail => !('estimatedWeeklyVisitors' in trail))).toBe(true);
     });
   });
   describe('distanceMiles', () => {

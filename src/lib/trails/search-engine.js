@@ -38,8 +38,20 @@ export function resolveSearchEntity(query) {
 
 export function deriveSearchFilters(query, preferences = {}) {
   const normalized = String(query || '').toLowerCase();
+  const requestedLength = preferences.hiking?.length;
+  const distanceRanges = {
+    short: { maxDistanceMiles: 2 },
+    medium: { minDistanceMiles: 2, maxDistanceMiles: 5 },
+    long: { minDistanceMiles: 5, maxDistanceMiles: 10 },
+    verylong: { minDistanceMiles: 10 },
+    'Under 3 miles': { maxDistanceMiles: 3 },
+    '3–5 miles': { minDistanceMiles: 3, maxDistanceMiles: 5 },
+    '5–10 miles': { minDistanceMiles: 5, maxDistanceMiles: 10 },
+  };
   const requestedDifficulty = preferences.hiking?.difficulty;
-  const difficulties = Array.isArray(requestedDifficulty) ? requestedDifficulty : requestedDifficulty ? [requestedDifficulty] : [];
+  const difficulties = (Array.isArray(requestedDifficulty) ? requestedDifficulty : requestedDifficulty ? [requestedDifficulty] : [])
+    .map(difficulty => difficulty === 'Expert' ? 'Strenuous' : difficulty)
+    .filter(difficulty => ['Easy', 'Moderate', 'Hard', 'Strenuous'].includes(difficulty));
   for (const difficulty of ['Easy', 'Moderate', 'Hard', 'Strenuous']) {
     if (normalized.includes(difficulty.toLowerCase()) && !difficulties.includes(difficulty)) difficulties.push(difficulty);
   }
@@ -48,13 +60,14 @@ export function deriveSearchFilters(query, preferences = {}) {
   if (/lake/.test(normalized)) features.push('Lake');
   if (/summit|peak/.test(normalized)) features.push('Summit');
   if (/scenic|views?/.test(normalized)) features.push('Scenic');
-  return { difficulties, features, activities: ['Hiking'] };
+  return { difficulties, features, activities: ['Hiking'], ...(distanceRanges[requestedLength] || {}) };
 }
 
 export function trailMatchesFilters(trail, filters) {
   if (filters.difficulties?.length && !filters.difficulties.includes(trail.difficulty)) return false;
   if (filters.activities?.length && !filters.activities.some(activity => trail.activities.includes(activity))) return false;
   if (filters.features?.length && !filters.features.every(feature => trail.features.includes(feature))) return false;
+  if (filters.minDistanceMiles != null && (trail.route.distanceMiles == null || trail.route.distanceMiles < filters.minDistanceMiles)) return false;
   if (filters.maxDistanceMiles != null && (trail.route.distanceMiles == null || trail.route.distanceMiles > filters.maxDistanceMiles)) return false;
   if (filters.excludeStatuses?.includes(trail.access.status)) return false;
   return true;
@@ -69,6 +82,8 @@ export function scoreTrail(trail, { query, entity, filters }) {
   const filterMatches = [
     !filters.difficulties?.length || filters.difficulties.includes(trail.difficulty),
     !filters.features?.length || filters.features.every(feature => trail.features.includes(feature)),
+    filters.minDistanceMiles == null || (trail.route.distanceMiles != null && trail.route.distanceMiles >= filters.minDistanceMiles),
+    filters.maxDistanceMiles == null || (trail.route.distanceMiles != null && trail.route.distanceMiles <= filters.maxDistanceMiles),
   ].filter(Boolean).length;
   const completeness = [trail.route.distanceMiles, trail.route.elevationGainFeet, trail.source.sourceUrl].filter(value => value != null).length;
 

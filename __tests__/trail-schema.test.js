@@ -41,6 +41,20 @@ describe('canonical trail schema', () => {
 
     expect(result.valid).toBe(true);
     expect(result.errors).toEqual([]);
+    expect(result.trail.route).toMatchObject({ distanceMiles: 15.4, elevationGainFeet: 4799 });
+  });
+
+  it('keeps nested canonical facts when normalization is repeated', () => {
+    const canonical = normalizeTrail({
+      id: 'repeatable-trail', slug: 'repeatable-trail', name: 'Repeatable Trail',
+      trailhead: { lat: 37.7, lng: -119.6 }, difficulty: 'Moderate',
+      route: { type: 'Loop', distanceMiles: 4.2, elevationGainFeet: 650 },
+      quality: { reviewCount: 12 }, source: { provider: 'test' },
+    });
+    expect(normalizeTrail(canonical)).toMatchObject({
+      route: { type: 'Loop', distanceMiles: 4.2, elevationGainFeet: 650 },
+      quality: { reviewCount: 12 },
+    });
   });
 
   it('rejects unsafe or noncanonical values', () => {
@@ -71,4 +85,3 @@ describe('search quality contract', () => {
     expect(SEARCH_QUALITY_TARGETS.closedTrailTop5Rate).toBe(0);
   });
 });
-

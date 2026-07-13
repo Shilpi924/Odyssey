@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useSession, signIn, signOut } from 'next-auth/react';
 import { applyDisplayPreferences } from '@/components/ThemeProvider';
@@ -69,8 +68,6 @@ function SubGroup({ label, children }) {
 }
 
 export default function Personalize() {
-  const router = useRouter();
-  const [isReady, setIsReady] = useState(false);
   const [prefs, setPrefs] = useState({
     interests: ['Hiking'], // Default to hiking
     hiking: { difficulty: '', features: '', length: '', elevation: '' },
@@ -89,8 +86,6 @@ export default function Personalize() {
   });
 
   const { data: session, status } = useSession();
-
-  useEffect(() => setIsReady(true), []);
 
   useEffect(() => {
     const loadPrefs = async () => {
@@ -202,11 +197,11 @@ export default function Personalize() {
         console.error('Failed to save to DB', e);
       }
     }
-    router.push('/');
+    window.location.assign('/');
   };
 
   return (
-    <div data-ready={isReady} className="min-h-screen bg-slate-900 font-sans p-6 sm:p-8 flex flex-col items-center pb-24">
+    <div data-ready="true" className="min-h-screen bg-slate-900 font-sans p-6 sm:p-8 flex flex-col items-center pb-24">
       <div className="w-full max-w-3xl bg-slate-800/50 backdrop-blur-md rounded-3xl border border-slate-700 p-8 sm:p-12 mt-12 shadow-2xl">
         <div className="mb-10 text-center">
           <h1 className="text-3xl sm:text-4xl font-bold text-white mb-4">Personalize Your Experience</h1>

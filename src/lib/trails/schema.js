@@ -30,9 +30,9 @@ function normalizePoint(point = {}) {
 }
 
 export function normalizeTrail(input = {}) {
-  const distanceMiles = finiteNumber(input.distanceMiles ?? input.distance);
-  const elevationGainFeet = finiteNumber(input.elevationGainFeet ?? input.elevationGain);
-  const reviewCount = finiteNumber(input.reviewCount ?? input.userRatingsTotal) ?? 0;
+  const distanceMiles = finiteNumber(input.route?.distanceMiles ?? input.distanceMiles ?? input.distance);
+  const elevationGainFeet = finiteNumber(input.route?.elevationGainFeet ?? input.elevationGainFeet ?? input.elevationGain);
+  const reviewCount = finiteNumber(input.quality?.reviewCount ?? input.reviewCount ?? input.userRatingsTotal) ?? 0;
 
   return {
     schemaVersion: TRAIL_SCHEMA_VERSION,

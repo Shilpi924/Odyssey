@@ -1,35 +1,13 @@
 'use client';
-/* eslint-disable @next/next/no-img-element -- Saved trail photos may be cached blobs or third-party URLs. */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { db } from '@/lib/db';
-import { deleteAreaTiles, clearAllTiles } from '@/lib/offline-maps';
+import { OSM_MAP_STYLE } from '@/lib/map-style';
 import Map, { Marker, Source, Layer } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import maplibregl from 'maplibre-gl';
 import { motion } from 'framer-motion';
-
-const OSM_STYLE = {
-  version: 8,
-  sources: {
-    osm: {
-      type: 'raster',
-      tiles: ['https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'],
-      tileSize: 256,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-    }
-  },
-  layers: [
-    {
-      id: 'osm',
-      type: 'raster',
-      source: 'osm',
-      minzoom: 0,
-      maxzoom: 19
-    }
-  ]
-};
 
 const getPinColor = (index) => {
   const colors = [
@@ -106,14 +84,10 @@ export default function SavedHikesPage() {
   useEffect(() => {
     const load = async () => {
       const hikes = await db.savedHikes.toArray();
-      const withUrls = hikes.map(h => ({
-        ...h,
-        imageUrl: h.mapImageBlob ? URL.createObjectURL(h.mapImageBlob) : null
-      }));
-      setSavedHikes(withUrls);
+      setSavedHikes(hikes);
       
-      if (withUrls.length > 0) {
-        setMapCenter({ lat: withUrls[0].lat, lng: withUrls[0].lng });
+      if (hikes.length > 0) {
+        setMapCenter({ lat: hikes[0].lat, lng: hikes[0].lng });
       }
     };
     load();
@@ -141,15 +115,6 @@ export default function SavedHikesPage() {
       }
       return next;
     });
-    if (hike.lat && hike.lng) {
-      deleteAreaTiles(hike).catch(console.error).finally(() => loadQuota());
-    }
-  };
-
-  const handleClearAll = async () => {
-    if (!confirm('Are you sure you want to delete all offline map tiles? This will free up storage space.')) return;
-    await clearAllTiles();
-    loadQuota();
   };
 
   const selectHike = (idx) => {
@@ -243,12 +208,7 @@ export default function SavedHikesPage() {
                 <span className="text-sm font-semibold text-white">Browser Storage</span>
                 <span className="text-xs text-slate-400">{formatBytes(quota.usage)} used</span>
               </div>
-              <button 
-                onClick={handleClearAll}
-                className="px-3 py-1.5 bg-rose-900/30 text-rose-400 hover:bg-rose-900/50 rounded-lg text-xs font-medium transition-colors"
-              >
-                Clear Cache
-              </button>
+              <span className="text-[10px] text-slate-500">Saved trail facts and GPS records</span>
             </div>
           )}
 
@@ -257,7 +217,7 @@ export default function SavedHikesPage() {
               <span className="text-4xl opacity-50">🧭</span>
               <p className="text-slate-400 font-medium">No saved hikes</p>
               <p className="text-slate-500 text-sm max-w-xs">
-                Save hikes while you have an internet connection to view them here on the trail.
+                Save verified trail facts so you can review them later. The interactive basemap still requires a connection.
               </p>
               <Link href="/search" className="mt-4 px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium transition-colors">
                 Find Hikes
@@ -275,13 +235,6 @@ export default function SavedHikesPage() {
                   }`}
                 >
                   
-                  {/* Photo representation */}
-                  {hike.imageUrl && hike.photoRef && (
-                    <div className="relative h-32 bg-slate-700 w-full overflow-hidden">
-                      <img src={hike.imageUrl} alt={hike.name} className="w-full h-full object-cover" />
-                    </div>
-                  )}
-
                   <div className="p-4 flex flex-col gap-2">
                     <div className="flex justify-between items-start gap-2">
                       <div className="flex items-center gap-2">
@@ -332,7 +285,7 @@ export default function SavedHikesPage() {
                 latitude: mapCenter?.lat || 37.7749,
                 zoom: mapZoom
               }}
-              mapStyle={OSM_STYLE}
+              mapStyle={OSM_MAP_STYLE}
               style={{ width: '100%', height: '100%' }}
               onZoom={(e) => setMapZoom(e.viewState.zoom)}
             >

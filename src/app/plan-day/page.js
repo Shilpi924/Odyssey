@@ -38,7 +38,7 @@ export default function PlanDayPage() {
       items.push({ time: cursor, duration: 45, type: 'Fuel up', title: 'Coffee near the trail area', note: 'Choose a locally rated stop after the route is selected.' });
       cursor += 60;
     }
-    items.push({ time: cursor, duration: hikeLength, type: 'Main activity', title: 'Personalized trail recommendation', note: 'Matched to your group, desired pace, weather, and trail conditions.', primary: true });
+    items.push({ time: cursor, duration: hikeLength, type: 'Main activity', title: 'Trail-time placeholder', note: 'Drafted from your selected timing and pace; not based on live weather or trail conditions.', primary: true });
     cursor += hikeLength + 45;
     if (form.interests.includes('Local food')) {
       items.push({ time: cursor, duration: 75, type: 'After the hike', title: 'Casual local meal', note: 'Prioritize a nearby option with current opening hours.' });

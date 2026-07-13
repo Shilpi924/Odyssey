@@ -5,13 +5,13 @@ const actions = [
   { href: '/search?nearme=true', eyebrow: 'Use my location', title: 'Find hikes near me', icon: '⌖', tone: 'emerald' },
   { href: '/plan', eyebrow: 'Personalized planning', title: 'Plan for my group', icon: '↗', tone: 'amber' },
   { href: '/plan-day', eyebrow: 'Hike + nearby stops', title: 'Plan my day', icon: '☼', tone: 'amber' },
-  { href: '/saved', eyebrow: 'Works without signal', title: 'Open offline maps', icon: '↓', tone: 'sky' },
+  { href: '/saved', eyebrow: 'Keep a shortlist', title: 'Open saved trails', icon: '↓', tone: 'sky' },
 ];
 
 const proof = [
-  ['01', 'Group-aware', 'Match distance, ability, accessibility, and who is coming.'],
-  ['02', 'Conditions-aware', 'Weather and trail context are factored into every result.'],
-  ['03', 'Trail-ready', 'Save the map, mark the trailhead, and track with live GPS.'],
+  ['01', 'Preference-aware', 'Filter sourced trail facts by difficulty, distance, and available features.'],
+  ['02', 'Source-aware', 'Official alerts and provenance stay visible; unknown facts remain unknown.'],
+  ['03', 'Trail-ready', 'Save trail facts, locate the trailhead, and track locally with live GPS.'],
 ];
 
 export default function Home() {
@@ -40,7 +40,7 @@ export default function Home() {
               The right trail for <span className="text-[#d9a14a] italic font-serif">everyone</span> in your group.
             </h1>
             <p className="mt-7 max-w-xl text-lg sm:text-xl leading-relaxed text-stone-300">
-              Hiking recommendations that consider ability, distance, weather, and accessibility—plus offline maps and live GPS tracking.
+              Sourced Yosemite trail recommendations with difficulty filters, official alerts, saved trail facts, and local GPS tracking.
             </p>
             <div className="mt-9 flex flex-col sm:flex-row gap-3">
               <Link href="/plan" className="rounded-xl bg-[var(--app-accent)] px-6 py-4 text-center font-bold text-[#122019] hover:brightness-110 transition-all">Plan my hike <span className="ml-2">→</span></Link>

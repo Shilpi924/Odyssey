@@ -1,11 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
 export async function POST(request) {
   try {
-    const { trails, userMessage, history, preferences, locationName } = await request.json();
+    const { trails, userMessage, history } = await request.json();
+    if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: 'Conversational refinement is not configured' }, { status: 503 });
+    if (!Array.isArray(trails) || !userMessage?.trim()) return NextResponse.json({ error: 'Trails and userMessage are required' }, { status: 400 });
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
     const trailSummary = (trails || [])
       .map((t, i) =>
@@ -20,19 +21,19 @@ Current trails shown to user:
 ${trailSummary}
 
 Your job:
-1. If user wants to filter/reorder → return a filtered/reordered subset with all original fields intact
+1. If user wants to filter/reorder → return only the exact names of a filtered/reordered subset. Never add a trail or alter its facts.
 2. If user needs completely different trails (closer, different area, different type) → set action to "new_search"
 3. If user is asking a question (not refining) → answer it, keep trails unchanged, set action to "answered"
 
 Return JSON exactly like this:
 {
-  "trails": [...],   // AI trail objects with ALL original fields (especially lat/lng/why/tip/bestTime/parkingNote)
+  "trails": [{ "name": "exact existing trail name" }],
   "message": "...", // 1–2 sentence friendly response explaining what you did
   "action": "filtered" | "new_search" | "answered"
 }
 
 For "new_search": set trails to [] and explain in message what you'll search for.
-For "filtered": always include ALL original fields from the existing trails — copy them verbatim.
+For "filtered": include names from the supplied list only.
 RESPOND WITH VALID JSON ONLY.
 
 -------------------
@@ -41,7 +42,7 @@ When a user states that they are lost, injured, stranded, disoriented, or unable
 - Keep the response short, calm, and easy to follow.
 - Do not invent trails, landmarks, coordinates, distances, compass directions, or rescue information.
 - Instruct them to remain calm, stop moving, and utilize the on-screen deterministic Safety Controls.
-- Suggest checking the offline map, recorded route, and sharing coordinates with emergency contacts.`;
+- Suggest checking the locally recorded route and sharing coordinates with emergency contacts.`;
 
     const messages = [
       ...(history || []).map((m) => ({ role: m.role, content: m.content })),
@@ -64,12 +65,14 @@ When a user states that they are lost, injured, stranded, disoriented, or unable
       result = { trails, message: response.content[0].text.trim(), action: 'answered' };
     }
 
-    // Re-merge original trail data so lat/lng/photos are preserved even when Claude only returns name
+    // Only the original server-supplied objects may be returned. Model output can
+    // choose and order known names but cannot change a sourced fact.
     if (result.action === 'filtered' && result.trails?.length) {
-      result.trails = result.trails.map((rt) => {
-        const orig = (trails || []).find((t) => t.name === rt.name);
-        return orig ? { ...orig, ...rt } : rt;
-      });
+      result.trails = result.trails
+        .map(candidate => trails.find(trail => trail.name === candidate.name))
+        .filter(Boolean);
+    } else if (result.action !== 'new_search') {
+      result.trails = trails;
     }
 
     return NextResponse.json(result);

@@ -1,7 +1,7 @@
 {
   "name": "Odyssey",
   "short_name": "Odyssey",
-  "description": "Your AI-powered hiking and travel companion.",
+  "description": "Sourced trail discovery, saved trail facts, and local GPS tracking.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",

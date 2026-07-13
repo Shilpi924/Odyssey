@@ -11,7 +11,7 @@ describe('catalog entity resolution', () => {
     expect(resolveSearchEntity('El Capitan')).toMatchObject({ type: 'trail', id: 'el-capitan-trail' });
   });
 
-  it('leaves uncovered destinations for the fallback provider', () => {
+  it('leaves uncovered destinations unresolved instead of guessing', () => {
     expect(resolveSearchEntity('hikes in Zion')).toBeNull();
   });
 });
@@ -21,6 +21,17 @@ describe('structured catalog search', () => {
     expect(deriveSearchFilters('easy waterfall hikes in Yosemite')).toMatchObject({
       difficulties: ['Easy'], features: ['Waterfall'], activities: ['Hiking'],
     });
+  });
+
+  it('normalizes Expert and ignores Any difficulty preferences', () => {
+    expect(deriveSearchFilters('Yosemite', { hiking: { difficulty: ['Expert'] } }).difficulties).toEqual(['Strenuous']);
+    expect(deriveSearchFilters('Yosemite', { hiking: { difficulty: ['Any'] } }).difficulties).toEqual([]);
+  });
+
+  it('applies the planning distance ranges to sourced route lengths', () => {
+    const search = searchCatalog({ query: 'Yosemite', preferences: { hiking: { length: '3–5 miles' } } });
+    expect(search.results.length).toBeGreaterThan(0);
+    expect(search.results.every(({ trail }) => trail.route.distanceMiles >= 3 && trail.route.distanceMiles <= 5)).toBe(true);
   });
 
   it('returns Half Dome and El Capitan for strenuous Yosemite searches', () => {

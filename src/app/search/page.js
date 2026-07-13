@@ -1,5 +1,4 @@
 'use client';
-/* eslint-disable @next/next/no-img-element -- Trail photos use dynamic third-party and cached sources. */
 
 import { useState, useEffect, useRef, Suspense, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -8,12 +7,8 @@ import Map, { Marker, Source, Layer } from 'react-map-gl/maplibre';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { db } from '@/lib/db';
-import { downloadAreaTiles, deleteAreaTiles } from '@/lib/offline-maps';
+import { OSM_MAP_STYLE } from '@/lib/map-style';
 import { motion, AnimatePresence } from 'framer-motion';
-import TrailConditions from '@/components/features/TrailConditions';
-import PointsOfInterest from '@/components/features/PointsOfInterest';
-import Terrain3DPreview from '@/components/features/Terrain3DPreview';
-import PrintMaps from '@/components/features/PrintMaps';
 import TrailCardSkeleton from '@/components/ui/TrailCardSkeleton';
 import QuickFilters from '@/components/ui/QuickFilters';
 import SearchHistory, { addToHistory } from '@/components/ui/SearchHistory';
@@ -69,64 +64,22 @@ function knownSearchDestination(query) {
   return KNOWN_SEARCH_DESTINATIONS.find(destination => destination.pattern.test(query || '')) || null;
 }
 
-// ─── Weather helpers ───────────────────────────────────────────────────────────
-
-function weatherEmoji(code) {
-  if (code == null) return '🌤️';
-  if (code === 0) return '☀️';
-  if (code <= 2) return '🌤️';
-  if (code === 3) return '☁️';
-  if (code <= 48) return '🌫️';
-  if (code <= 67) return '🌧️';
-  if (code <= 77) return '❄️';
-  if (code <= 82) return '🌦️';
-  return '⛈️';
-}
-
-function hikingAdvisory(code, temp) {
-  if (code == null) return { text: 'Great hiking conditions!', style: 'bg-emerald-900/40 border-emerald-500/40 text-emerald-200' };
-  if (code >= 95) return { text: '⚠️ Dangerous storm — avoid hiking today', style: 'bg-rose-900/50 border-rose-500/40 text-rose-200' };
-  if (code >= 80) return { text: 'Rain showers expected — trails may be wet', style: 'bg-blue-900/40 border-blue-500/40 text-blue-200' };
-  if (code >= 61) return { text: 'Rainy — bring waterproof layers', style: 'bg-blue-900/40 border-blue-500/40 text-blue-200' };
-  if (code >= 45) return { text: 'Foggy — reduced visibility on ridges', style: 'bg-slate-700/60 border-slate-500/40 text-slate-200' };
-  if (temp > 95) return { text: '🥵 Extreme heat — start before 8am, shaded trails only', style: 'bg-rose-900/40 border-rose-400/40 text-rose-200' };
-  if (temp > 85) return { text: '☀️ Warm day — Odyssey prioritized shaded trails for you', style: 'bg-amber-900/40 border-amber-500/40 text-amber-200' };
-  if (temp < 32) return { text: '🥶 Freezing — watch for ice on trails', style: 'bg-blue-900/40 border-blue-400/40 text-blue-200' };
-  return { text: '🌿 Great conditions for hiking!', style: 'bg-emerald-900/40 border-emerald-500/40 text-emerald-200' };
-}
-
-// ─── Satellite thumbnail URL ───────────────────────────────────────────────────
-
-function staticMapUrl(lat, lng, apiKey) {
+function TrailCardHeader({ trail, index, color, difficulty }) {
   return (
-    `https://maps.googleapis.com/maps/api/staticmap` +
-    `?center=${lat},${lng}&zoom=15&size=600x250&maptype=hybrid` +
-    `&markers=color:blue%7Csize:mid%7C${lat},${lng}&key=${apiKey}`
+    <div className="relative h-28 w-full overflow-hidden bg-gradient-to-br from-slate-700 via-slate-800 to-emerald-950">
+      <div className="absolute inset-0 opacity-30 bg-[radial-gradient(circle_at_70%_20%,#34d399,transparent_35%),linear-gradient(135deg,transparent_45%,#94a3b8_46%,transparent_48%)]" />
+      <div className={`absolute top-2 left-2 ${color.bg} text-white text-xs font-bold px-2 py-1 rounded-lg shadow`}>
+        {index + 1}
+      </div>
+      {trail.difficulty && (
+        <div className={`absolute top-2 right-2 text-xs font-bold px-2.5 py-1 rounded-lg shadow backdrop-blur-md ${difficulty.badge}`}>
+          {trail.difficulty}
+        </div>
+      )}
+      <p className="absolute bottom-3 left-4 text-xs font-medium text-slate-300">Verified catalog trail</p>
+    </div>
   );
 }
-
-// ─── OSM Map Style ─────────────────────────────────────────────────────────────
-
-const OSM_STYLE = {
-  version: 8,
-  sources: {
-    osm: {
-      type: 'raster',
-      tiles: ['https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'],
-      tileSize: 256,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-    }
-  },
-  layers: [
-    {
-      id: 'osm',
-      type: 'raster',
-      source: 'osm',
-      minzoom: 0,
-      maxzoom: 19
-    }
-  ]
-};
 
 // ─── Trail Chat Drawer ─────────────────────────────────────────────────────────
 
@@ -182,7 +135,7 @@ function TrailChatDrawer({ trail, open, onClose, onTriggerSafetyMode }) {
       setHistory([
         {
           role: 'assistant',
-          content: `I know ${trail.name} well! Ask me anything — what to pack, parking, crowds, the hardest section, best viewpoints… 🥾`,
+          content: `Ask me about general preparation for ${trail.name}. I only know the sourced facts shown here, not current local conditions. 🥾`,
         },
       ]);
     }
@@ -324,36 +277,6 @@ function TrailChatDrawer({ trail, open, onClose, onTriggerSafetyMode }) {
   );
 }
 
-// ─── Weather Banner ────────────────────────────────────────────────────────────
-
-function EnvironmentalBanner({ weather }) {
-  if (!weather) return null;
-  const adv = hikingAdvisory(weather.code, weather.temp);
-  
-  // Dummy data for Pollen and AQI if not provided by backend yet
-  const aqi = weather.aqi || 42; 
-  const pollen = weather.pollen || 'Low';
-
-  return (
-    <div className={`mx-4 mt-4 px-4 py-3 rounded-2xl border flex items-center justify-between gap-3 shadow-lg backdrop-blur-md bg-opacity-80 ${adv.style}`}>
-      <div className="flex items-center gap-3">
-        <span className="text-2xl">{weatherEmoji(weather.code)}</span>
-        <div className="flex flex-col">
-          <p className="font-semibold text-sm">{weather.temp}°F · {weather.condition}</p>
-          <div className="flex gap-2 text-xs mt-0.5 opacity-90 font-medium">
-            <span>💨 AQI: {aqi}</span>
-            <span>🤧 Pollen: {pollen}</span>
-          </div>
-        </div>
-      </div>
-      <div className="flex flex-col items-end text-xs opacity-80 shrink-0">
-        <span className="font-semibold">{adv.text}</span>
-        <span>Feels {weather.feelsLike}°F</span>
-      </div>
-    </div>
-  );
-}
-
 // ─── Map Pins ──────────────────────────────────────────────────────────────────
 
 function TrailPin({ trail, index, isSelected, onClick }) {
@@ -403,7 +326,7 @@ function UserPin({ position, heading }) {
   );
 }
 
-function MapPopup({ trail, index, onClose, onScrollToCard, onStartHike, downloadProgress }) {
+function MapPopup({ trail, index, onClose, onStartHike }) {
   const d = getPinColor(index);
   const diffBadge = getDiff(trail.difficulty);
   return (
@@ -437,16 +360,6 @@ function MapPopup({ trail, index, onClose, onScrollToCard, onStartHike, download
             🚶 Start Hike
           </button>
         </div>
-        
-        {/* Download Progress Bar */}
-        {downloadProgress && (
-          <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-slate-800">
-            <div 
-              className="h-full bg-blue-500 transition-all duration-300"
-              style={{ width: `${Math.max(5, (downloadProgress.count / downloadProgress.total) * 100)}%` }}
-            />
-          </div>
-        )}
       </div>
     </Marker>
   );
@@ -506,11 +419,9 @@ function SkeletonTrailCard() {
 
 // ─── AI Trail Card ─────────────────────────────────────────────────────────────
 
-function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onAskAI, onSave, isSaved, onCompareToggle, isComparing, onStartHike, downloadProgress, weather, searchMode }) {
+function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onAskAI, onSave, isSaved, onCompareToggle, isComparing, onStartHike, searchMode }) {
   const d = getPinColor(index);
   const diffBadge = getDiff(trail.difficulty);
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-  const [imgLoaded, setImgLoaded] = useState(false);
 
   const handleDragEnd = (event, info) => {
     if (info.offset.x > 100) {
@@ -536,32 +447,7 @@ function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onAskAI, onS
       </div>
 
       <div className={`${d.cardBg} w-full h-full relative`}>
-      {/* Satellite thumbnail */}
-      {trail.lat && trail.lng && (
-        <div className="relative h-36 w-full overflow-hidden bg-slate-700">
-          <img
-            src={staticMapUrl(trail.lat, trail.lng, apiKey)}
-            alt={trail.name}
-            className={`w-full h-full object-cover transition-opacity duration-500 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
-            onLoad={() => setImgLoaded(true)}
-          />
-          {!imgLoaded && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-6 h-6 rounded-full border-2 border-slate-500 border-t-transparent animate-spin" />
-            </div>
-          )}
-          {/* Index badge */}
-          <div className={`absolute top-2 left-2 ${d.bg} text-white text-xs font-bold px-2 py-1 rounded-lg shadow`}>
-            {index + 1}
-          </div>
-          {/* Difficulty badge */}
-          {trail.difficulty && (
-            <div className={`absolute top-2 right-2 text-xs font-bold px-2.5 py-1 rounded-lg shadow backdrop-blur-md ${diffBadge.badge}`}>
-              {trail.difficulty}
-            </div>
-          )}
-        </div>
-      )}
+      <TrailCardHeader trail={trail} index={index} color={d} difficulty={diffBadge} />
 
       <div className="p-5 flex flex-col gap-3">
         {/* Header row */}
@@ -579,11 +465,6 @@ function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onAskAI, onS
                 {trail.userRatingsTotal > 0 && <span className="text-amber-400/70 ml-0.5">({trail.userRatingsTotal.toLocaleString()})</span>}
               </span>
             )}
-            {trail.estimatedWeeklyVisitors > 0 && (
-              <span className="flex items-center gap-1 text-slate-400">
-                👥 ~{trail.estimatedWeeklyVisitors.toLocaleString()}/wk
-              </span>
-            )}
           </div>
         </div>
 
@@ -599,7 +480,6 @@ function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onAskAI, onS
         <div className="flex gap-4 text-sm text-slate-300 items-end">
           {trail.length && <span>🥾 {trail.length}</span>}
           {trail.elevationGain && <span>⬆️ {trail.elevationGain}</span>}
-          {trail.estimatedWeeklyVisitors && <span className="text-xs opacity-70">👥 ~{trail.estimatedWeeklyVisitors.toLocaleString()}/wk</span>}
           {trail.sparkline && <Sparkline data={trail.sparkline} />}
         </div>
 
@@ -644,24 +524,6 @@ function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onAskAI, onS
           </div>
         )}
 
-        {/* Trail Conditions - only show in AI mode with weather */}
-        {weather && searchMode === 'ai' && (
-          <TrailConditions trail={trail} weather={weather} />
-        )}
-
-        {/* Points of Interest - only show in AI mode */}
-        {searchMode === 'ai' && (
-          <PointsOfInterest trail={trail} />
-        )}
-
-        {/* Terrain 3D Preview - only show in AI mode */}
-        {searchMode === 'ai' && (
-          <Terrain3DPreview trail={trail} />
-        )}
-
-        {/* Print Maps - show in both modes */}
-        <PrintMaps trail={trail} />
-
         {/* Actions */}
         <div className="flex gap-2 pt-1">
           <button
@@ -671,7 +533,7 @@ function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onAskAI, onS
             }}
             className={`flex-1 text-xs py-2.5 rounded-xl transition-colors font-medium ${isSaved ? 'bg-emerald-900/50 text-emerald-300 border border-emerald-500/30' : 'bg-slate-700 hover:bg-slate-600 text-white'}`}
           >
-            {isSaved ? '✓ Saved Offline' : '💾 Download Map'}
+            {isSaved ? '✓ Saved' : '💾 Save Trail'}
           </button>
           {trail.difficulty ? (
             <button
@@ -712,28 +574,15 @@ function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onAskAI, onS
         </AnimatePresence>
       </div>
       </div>
-      {/* Download Progress Bar */}
-      {downloadProgress && (
-        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-slate-800">
-          <div 
-            className="h-full bg-blue-500 transition-all duration-300"
-            style={{ width: `${Math.max(5, (downloadProgress.count / downloadProgress.total) * 100)}%` }}
-          />
-        </div>
-      )}
     </motion.div>
   );
 }
 
-// ─── Fast Trail Card (Google Places) ──────────────────────────────────────────
+// ─── Verified catalog trail card ──────────────────────────────────────────────
 
-function FastTrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetView, onSave, isSaved, onStartHike, downloadProgress }) {
+function FastTrailCard({ trail, index, isSelected, onSelect, cardRef, onSave, isSaved, onStartHike }) {
   const d = getPinColor(index);
-  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-  const [imgLoaded, setImgLoaded] = useState(false);
-  const imgSrc = trail.photoRef
-    ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=600&photoreference=${trail.photoRef}&key=${apiKey}`
-    : staticMapUrl(trail.lat, trail.lng, apiKey);
+  const diffBadge = getDiff(trail.difficulty);
 
   return (
     <div
@@ -743,32 +592,7 @@ function FastTrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetVi
         isSelected ? `${d.border} shadow-2xl ${d.shadow} ring-2 ${d.ring} -translate-y-1` : 'border-slate-700/70 hover:border-slate-500 hover:shadow-xl hover:-translate-y-0.5'
       }`}
     >
-      {trail.lat && trail.lng && (
-        <div className="relative h-32 w-full overflow-hidden bg-slate-700">
-          <img
-            src={imgSrc}
-            alt={trail.name}
-            className={`w-full h-full object-cover transition-opacity duration-500 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
-            onLoad={() => setImgLoaded(true)}
-            onError={(e) => {
-              if (trail.photoRef) e.target.src = staticMapUrl(trail.lat, trail.lng, apiKey);
-            }}
-          />
-          {!imgLoaded && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-6 h-6 rounded-full border-2 border-slate-500 border-t-transparent animate-spin" />
-            </div>
-          )}
-          <div className={`absolute top-2 left-2 ${d.bg} text-white text-xs font-bold px-2 py-1 rounded-lg shadow`}>
-            {index + 1}
-          </div>
-          {trail.difficulty && (
-            <div className={`absolute top-2 right-2 text-xs font-bold px-2.5 py-1 rounded-lg shadow backdrop-blur-md ${getDiff(trail.difficulty).badge}`}>
-              {trail.difficulty}
-            </div>
-          )}
-        </div>
-      )}
+      <TrailCardHeader trail={trail} index={index} color={d} difficulty={diffBadge} />
 
       <div className="p-5 flex flex-col gap-2">
         <div className="flex flex-col gap-1.5">
@@ -785,11 +609,6 @@ function FastTrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetVi
                 <svg className="w-3 h-3 text-amber-400" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
                 {trail.rating}
                 {trail.userRatingsTotal > 0 && <span className="text-amber-400/70 ml-0.5">({trail.userRatingsTotal.toLocaleString()})</span>}
-              </span>
-            )}
-            {trail.estimatedWeeklyVisitors > 0 && (
-              <span className="flex items-center gap-1 text-slate-400">
-                👥 ~{trail.estimatedWeeklyVisitors.toLocaleString()}/wk
               </span>
             )}
           </div>
@@ -818,7 +637,7 @@ function FastTrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetVi
             }}
             className={`flex-1 text-xs py-2.5 rounded-xl transition-colors font-medium ${isSaved ? 'bg-emerald-900/50 text-emerald-300 border border-emerald-500/30' : 'bg-slate-700 hover:bg-slate-600 text-white'}`}
           >
-            {isSaved ? '✓ Saved Offline' : '💾 Download Map'}
+            {isSaved ? '✓ Saved' : '💾 Save Trail'}
           </button>
           {trail.difficulty ? (
             <button
@@ -846,15 +665,6 @@ function FastTrailCard({ trail, index, isSelected, onSelect, cardRef, onStreetVi
           )}
         </AnimatePresence>
       </div>
-      {/* Download Progress Bar */}
-      {downloadProgress && (
-        <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-slate-800">
-          <div 
-            className="h-full bg-blue-500 transition-all duration-300"
-            style={{ width: `${Math.max(5, (downloadProgress.count / downloadProgress.total) * 100)}%` }}
-          />
-        </div>
-      )}
     </div>
   );
 }
@@ -1028,7 +838,7 @@ function SafetyPanel({ userLocation, onClose, isOffline }) {
             <p className="font-bold text-emerald-300">🛑 Safe but Lost Instructions:</p>
             <ul className="list-disc pl-5 space-y-1 text-xs">
               <li><strong>STOP MOVING.</strong> Do not hike blindly to avoid getting further lost.</li>
-              <li>Check the offline map to your right to retrace your tracked route (green line).</li>
+              <li>Use your locally recorded route (green line) to retrace your path when it is visible.</li>
               <li>Conserve battery: Dim screen, close other apps, put phone in low power mode.</li>
               <li>Stay visible. Keep warm or shaded as weather dictates.</li>
               <li>Use a whistle (3 short blasts) or mirror to signal rescuers.</li>
@@ -1076,14 +886,15 @@ function HikeSearchContent() {
   const [weather, setWeather] = useState(null);
   const [parkAlerts, setParkAlerts] = useState([]);
   const [alertsFetchedAt, setAlertsFetchedAt] = useState(null);
+  const [coverageMessage, setCoverageMessage] = useState('');
 
   // ── Search input state
   const [searchQuery, setSearchQuery] = useState(query && query !== 'hikes' ? query : '');
-  const [searchMode, setSearchMode] = useState('fast'); // 'fast' | 'ai' | 'auto'
-  const [groupMode, setGroupMode] = useState(false);
-  const [groupDescription, setGroupDescription] = useState('');
-  const [searchRadius, setSearchRadius] = useState(25);
-  const [priceRange, setPriceRange] = useState('');
+  const searchMode = 'fast';
+  const groupMode = false;
+  const groupDescription = '';
+  const searchRadius = 25;
+  const priceRange = '';
   
   // ── Filter state
   const [activeFilters, setActiveFilters] = useState([]);
@@ -1092,7 +903,6 @@ function HikeSearchContent() {
   const [preloadedData, setPreloadedData] = useState(null);
   const [isPreloading, setIsPreloading] = useState(false);
   const [preloadedKey, setPreloadedKey] = useState(null);
-  const [preloadedImages, setPreloadedImages] = useState(new Set());
 
   // ── Map state
   const [selectedIdx, setSelectedIdx] = useState(null);
@@ -1100,7 +910,6 @@ function HikeSearchContent() {
   const [mapType, setMapType] = useState('roadmap');
   const [mapZoom, setMapZoom] = useState(12);
   const [showTraffic, setShowTraffic] = useState(false);
-  const [is3D, setIs3D] = useState(true);
 
   // ── Refinement state
   const [conversation, setConversation] = useState([]);
@@ -1140,8 +949,6 @@ function HikeSearchContent() {
   // ── Offline & Saved state
   const [isOffline, setIsOffline] = useState(false);
   const [savedIds, setSavedIds] = useState(new Set());
-  const [downloadProgress, setDownloadProgress] = useState(null);
-  const [showIosWarning, setShowIosWarning] = useState(false);
 
   const handleSaveHike = async (trail) => {
     try {
@@ -1149,40 +956,13 @@ function HikeSearchContent() {
       if (savedIds.has(id)) {
         await db.savedHikes.where('id').equals(id).delete();
         setSavedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
-        if (trail.lat && trail.lng) {
-          deleteAreaTiles(trail).catch(console.error);
-        }
       } else {
-        // 1. Fetch map image to blob via our proxy to bypass CORS
-        let blob = null;
-        try {
-          const url = trail.photoRef 
-            ? `/api/proxy-image?photoRef=${trail.photoRef}`
-            : `/api/proxy-image?lat=${trail.lat}&lng=${trail.lng}`;
-          const res = await fetch(url);
-          if (res.ok) blob = await res.blob();
-        } catch (e) {
-          console.warn('Failed to fetch image proxy', e);
-        }
-
         await db.savedHikes.put({
           id,
           ...trail,
-          mapImageBlob: blob,
           savedAt: Date.now()
         });
         setSavedIds(prev => new Set(prev).add(id));
-        // Trigger background download of map tiles for this area
-        if (trail.lat && trail.lng) {
-          downloadAreaTiles(trail, (count, total) => {
-            setDownloadProgress({ id, count, total });
-          }).then(() => {
-            setDownloadProgress(null); // complete
-          }).catch(e => {
-            console.error('Download error:', e);
-            setDownloadProgress(null);
-          });
-        }
       }
     } catch (err) {
       console.error('Error saving hike:', err);
@@ -1509,25 +1289,6 @@ function HikeSearchContent() {
     setSelectedIdx(null);
   }, [userLocation, trails]);
 
-  // Preload card images in background
-  const preloadCardImages = useCallback((trailsToPreload) => {
-    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-    if (!apiKey) return;
-
-    trailsToPreload.forEach((trail) => {
-      if (trail.lat && trail.lng) {
-        const imageUrl = staticMapUrl(trail.lat, trail.lng, apiKey);
-        if (!preloadedImages.has(imageUrl)) {
-          const img = new Image();
-          img.src = imageUrl;
-          img.onload = () => {
-            setPreloadedImages(prev => new Set([...prev, imageUrl]));
-          };
-        }
-      }
-    });
-  }, [preloadedImages]);
-
   // Auto-fit to top 3 trails when trails load
   useEffect(() => {
     if (trails.length > 0 && mapRef.current && status === 'done') {
@@ -1542,16 +1303,6 @@ function HikeSearchContent() {
     }
   }, [trails, status, userLocation]);
 
-  useEffect(() => {
-    if (mapRef.current) {
-      mapRef.current.easeTo({
-        pitch: is3D ? 60 : 0,
-        bearing: is3D ? 15 : 0,
-        duration: 1000
-      });
-    }
-  }, [is3D]);
-
   function getLocation() {
     return new Promise((res, rej) =>
       navigator.geolocation.getCurrentPosition(res, rej, { timeout: 10000 })
@@ -1559,21 +1310,11 @@ function HikeSearchContent() {
   }
 
   async function getLocationName(lat, lng) {
-    try {
-      const r = await fetch(`/api/geocode?lat=${lat}&lng=${lng}`);
-      const d = await r.json();
-      if (r.ok && d.label) return d.label;
-    } catch {}
-    return null;
+    return `${lat.toFixed(3)}, ${lng.toFixed(3)}`;
   }
 
   async function getPlaceCoordinates(place) {
-    try {
-      const response = await fetch(`/api/geocode?address=${encodeURIComponent(place)}`);
-      const data = await response.json();
-      if (response.ok && data.location) return { lat: data.location.lat, lng: data.location.lng, name: data.label || place };
-    } catch {}
-    return null;
+    return knownSearchDestination(place);
   }
 
   const runSearch = useCallback(
@@ -1587,15 +1328,17 @@ function HikeSearchContent() {
       setWeather(null);
       setParkAlerts([]);
       setAlertsFetchedAt(null);
+      setCoverageMessage('');
 
       try {
         const knownDestination = knownSearchDestination(searchQuery);
         // A named place search should not wait for device GPS. GPS is only needed
         // for "near me" searches and distance-from-me features.
-        const pos = knownDestination ? null : await getLocation();
+        const needsDeviceLocation = !searchQuery.trim() || /\b(?:near me|nearby)\b/i.test(searchQuery);
+        const pos = knownDestination || !needsDeviceLocation ? null : await getLocation();
         const current = pos
           ? { lat: pos.coords.latitude, lng: pos.coords.longitude }
-          : { lat: knownDestination.lat, lng: knownDestination.lng };
+          : knownDestination || { lat: 37.8651, lng: -119.5383 };
         if (pos) setUserLocation(current);
         const plannedDestination = knownDestination || (searchParams.get('plan') && searchQuery ? await getPlaceCoordinates(searchQuery) : null);
         const lat = plannedDestination?.lat ?? current.lat;
@@ -1629,17 +1372,14 @@ function HikeSearchContent() {
           setTrails(data.trails || []);
           setWeather(data.weather || null);
           setSource(data.source || 'fast');
-          
-          // Preload card images in background
-          if (data.trails && data.trails.length > 0) {
-            preloadCardImages(data.trails);
-          }
+          setCoverageMessage(data.coverage?.message || '');
           
           setStatus('done');
           return;
         }
 
-        const locName = plannedDestination?.name || (await getLocationName(lat, lng)) || `${lat.toFixed(3)}, ${lng.toFixed(3)}`;
+        const unsupportedNamedDestination = searchQuery.trim() && !needsDeviceLocation && !plannedDestination;
+        const locName = plannedDestination?.name || (unsupportedNamedDestination ? '' : await getLocationName(lat, lng));
         setLocationName(locName);
         setStatus('searching');
 
@@ -1686,6 +1426,8 @@ function HikeSearchContent() {
         setTrails(data.trails || []);
         setWeather(data.weather || null);
         setSource(data.source || 'fast');
+        setHasMore(Boolean(data.hasMore));
+        setCoverageMessage(data.coverage?.message || '');
         setStatus('done');
 
         if (data.entity?.id === 'nps-yose' || data.entity?.parkId === 'nps-yose') {
@@ -1699,11 +1441,6 @@ function HikeSearchContent() {
           } catch {}
         }
 
-        // Preload card images in background
-        if (data.trails && data.trails.length > 0) {
-          preloadCardImages(data.trails);
-        }
-
       } catch (err) {
         setError(
           err.code === 1
@@ -1713,7 +1450,7 @@ function HikeSearchContent() {
         setStatus('error');
       }
     },
-    [searchQuery, searchMode, preferences, groupMode, groupDescription, searchRadius, preloadedData, preloadedKey, priceRange, preloadCardImages, searchParams]
+    [searchQuery, searchMode, preferences, groupMode, groupDescription, searchRadius, preloadedData, preloadedKey, priceRange, searchParams]
   );
 
   // Filtering is derived data; memoization avoids a second render and stale results.
@@ -1721,21 +1458,11 @@ function HikeSearchContent() {
     if (activeFilters.length === 0) return true;
       for (const filter of activeFilters) {
         switch (filter) {
-          case 'distance':
-            const dist = parseFloat(trail.distance) || 999;
-            if (dist >= 5) return false;
-            break;
           case 'easy':
             if (trail.difficulty !== 'Easy') return false;
             break;
           case 'moderate':
             if (trail.difficulty !== 'Moderate') return false;
-            break;
-          case 'rating':
-            if (!trail.rating || trail.rating < 4) return false;
-            break;
-          case 'dog':
-            if (!trail.features?.includes('DogFriendly')) return false;
             break;
           case 'scenic':
             if (!trail.features?.includes('Scenic')) return false;
@@ -1748,7 +1475,7 @@ function HikeSearchContent() {
   // Session Storage Caching
   useEffect(() => {
     if (status === 'done' && trails.length > 0) {
-      sessionStorage.setItem('odyssey_search_cache', JSON.stringify({
+      sessionStorage.setItem('odyssey_verified_search_cache_v1', JSON.stringify({
         query: searchParams.get('q'),
         status,
         trails,
@@ -1758,16 +1485,18 @@ function HikeSearchContent() {
         weather,
         locationName,
         userLocation,
-        searchMode
+        searchMode,
+        coverageMessage
       }));
     }
-  }, [status, trails, searchQuery, source, hasMore, weather, locationName, userLocation, searchMode, searchParams]);
+  }, [status, trails, searchQuery, source, hasMore, weather, locationName, userLocation, searchMode, searchParams, coverageMessage]);
 
   // Auto-trigger when navigated from home
   useEffect(() => {
     if (status !== 'idle' || !preferencesReady) return;
     
-    const cached = sessionStorage.getItem('odyssey_search_cache');
+    sessionStorage.removeItem('odyssey_search_cache');
+    const cached = sessionStorage.getItem('odyssey_verified_search_cache_v1');
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
@@ -1780,9 +1509,9 @@ function HikeSearchContent() {
           setSource(parsed.source);
           setHasMore(parsed.hasMore);
           setWeather(parsed.weather);
+          setCoverageMessage(parsed.coverageMessage || '');
           setLocationName(parsed.locationName);
           setUserLocation(parsed.userLocation);
-          setSearchMode(parsed.searchMode || 'fast');
           return;
         }
       } catch (e) {}
@@ -2029,35 +1758,6 @@ function HikeSearchContent() {
   const stopHike = async () => {
     setIsHiking(false);
     setIsPaused(false);
-    
-    // Trigger Background Sync fetch
-    if (activeHike) {
-      try {
-        const syncData = {
-          id: recoveredHike ? recoveredHike.id : `hike-${Date.now()}`,
-          userId: 'anonymous',
-          hikeName: activeHike.name || 'Unknown Hike',
-          distanceMeters: hikeDistance * 1609.34,
-          durationSeconds: hikeDuration,
-          elevationGainMeters: hikeElevationGain,
-          path: rawPath
-        };
-
-        fetch('/api/sync-hike', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(syncData)
-        }).catch(err => console.log('Hike sync deferred by Background Sync API'));
-
-        // Check iOS limitation
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-        if (isIOS) {
-          setShowIosWarning(true);
-        }
-      } catch (e) {
-        console.error('Failed to dispatch hike sync', e);
-      }
-    }
 
     setActiveHike(null);
     setHikePath([]);
@@ -2216,8 +1916,6 @@ function HikeSearchContent() {
       } else {
         if (data.trails?.length) setTrails(data.trails);
         setConversation([...nextConv, claudeMsg]);
-        // Switch to AI source badge if refinement returned AI data
-        if (data.trails?.length && source !== 'ai') setSource('ai');
       }
     } catch {
       setConversation([...nextConv, { role: 'assistant', content: 'Sorry, something went wrong.', display: 'Sorry, something went wrong.' }]);
@@ -2393,22 +2091,16 @@ function HikeSearchContent() {
       {/* ── Map strip ── */}
       {(hasTrails || isHiking || mobileView !== 'results') && (
         <div id="trail-map" className={`shrink-0 ${mobileView === 'results' ? 'h-[55vh]' : 'h-[calc(100vh-9rem)]'} md:h-full md:w-1/2 relative z-10 border-t md:border-t-0 md:border-l border-slate-700 order-last flex flex-col`}>
-          {weather && (
-             <div className="absolute top-2 left-1/2 -translate-x-1/2 z-[400] w-11/12 max-w-sm pointer-events-none">
-               <EnvironmentalBanner weather={weather} />
-             </div>
-          )}
             <Map
               ref={mapRef}
               initialViewState={{
                 longitude: mapCenter?.lng || -122.4194,
                 latitude: mapCenter?.lat || 37.7749,
                 zoom: mapZoom,
-                pitch: is3D ? 60 : 0,
-                bearing: is3D ? 15 : 0
+                pitch: 0,
+                bearing: 0
               }}
-              terrain={is3D ? { source: 'terrainSource', exaggeration: 1.5 } : undefined}
-              mapStyle={OSM_STYLE}
+              mapStyle={OSM_MAP_STYLE}
               style={{ width: '100%', height: '100%' }}
               minZoom={4}
               onZoom={(e) => setMapZoom(e.viewState.zoom)}
@@ -2420,36 +2112,6 @@ function HikeSearchContent() {
                 }
               }}
             >
-              {is3D && (
-                <>
-                  <Source
-                    id="terrainSource"
-                    type="raster-dem"
-                    tiles={['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png']}
-                    tileSize={256}
-                    maxzoom={15}
-                    encoding="terrarium"
-                  />
-                  <Source
-                    id="hillshadeSource"
-                    type="raster-dem"
-                    tiles={['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png']}
-                    tileSize={256}
-                    maxzoom={15}
-                    encoding="terrarium"
-                  />
-                  <Layer
-                    id="hillshade-layer"
-                    type="hillshade"
-                    source="hillshadeSource"
-                    paint={{
-                      'hillshade-shadow-color': '#475569',
-                      'hillshade-highlight-color': '#f8fafc',
-                      'hillshade-accent-color': '#1e293b'
-                    }}
-                  />
-                </>
-              )}
               {userLocation && <UserPin position={userLocation} heading={deviceHeading} />}
 
               {/* Live Tracked Path */}
@@ -2501,9 +2163,7 @@ function HikeSearchContent() {
                   trail={trails[selectedIdx]}
                   index={selectedIdx}
                   onClose={() => setSelectedIdx(null)}
-                  onScrollToCard={() => scrollToCard(selectedIdx)}
                   onStartHike={startHike}
-                  downloadProgress={downloadProgress?.id === `${trails[selectedIdx].name}-${trails[selectedIdx].lat}` ? downloadProgress : null}
                 />
               )}
 
@@ -2511,17 +2171,6 @@ function HikeSearchContent() {
               <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col gap-1.5 z-10">
                   <button onClick={() => mapRef.current?.zoomTo(mapZoom + 1)} className="w-10 h-10 bg-slate-900/90 backdrop-blur border border-slate-600 rounded-xl text-white text-xl font-bold flex items-center justify-center shadow-lg hover:bg-slate-700 transition-colors">+</button>
                   <button onClick={() => mapRef.current?.zoomTo(mapZoom - 1)} className="w-10 h-10 bg-slate-900/90 backdrop-blur border border-slate-600 rounded-xl text-white text-xl font-bold flex items-center justify-center shadow-lg hover:bg-slate-700 transition-colors">−</button>
-                  <button
-                    onClick={() => setIs3D(!is3D)}
-                    title={is3D ? "Switch to 2D Top-Down" : "Switch to 3D Terrain"}
-                    className={`w-10 h-10 backdrop-blur border rounded-xl text-base flex items-center justify-center shadow-lg transition-colors font-bold ${
-                      is3D 
-                        ? 'bg-emerald-600/90 border-emerald-400 text-white' 
-                        : 'bg-slate-900/90 border-slate-600 text-slate-300 hover:bg-slate-700'
-                    }`}
-                  >
-                    3D
-                  </button>
                   <button 
                     onClick={() => setMapRotationMode(prev => prev === 'north' ? 'compass' : 'north')}
                     title={mapRotationMode === 'north' ? "Switch to Compass Up" : "Switch to North Up"}
@@ -2638,24 +2287,6 @@ function HikeSearchContent() {
         ) : (
           <>
 
-        {/* iOS Background Sync Warning */}
-        {showIosWarning && (
-          <div className="mx-4 mt-4 p-4 bg-amber-950/40 border border-amber-500/50 rounded-2xl flex flex-col gap-2">
-            <h3 className="text-amber-400 font-bold flex items-center gap-2">
-              ⚠️ iOS Offline Sync Notice
-            </h3>
-            <p className="text-sm text-amber-200/80">
-              Your hike log has been queued. Since you are on iOS, Apple strictly limits background execution. Your hike will automatically sync to the server the next time you open the app while connected to the internet.
-            </p>
-            <button 
-              onClick={() => setShowIosWarning(false)}
-              className="mt-2 text-xs font-bold text-amber-400 hover:text-amber-300 self-end"
-            >
-              DISMISS
-            </button>
-          </div>
-        )}
-
         {/* Loading states */}
         {status === 'locating' && (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
@@ -2712,10 +2343,9 @@ function HikeSearchContent() {
                 </div>
               </div>
             )}
-            <QuickFilters 
-              trails={trails} 
+            <QuickFilters
               activeFilters={activeFilters}
-              onFilter={setActiveFilters} 
+              onFilter={setActiveFilters}
             />
 
             {/* Active preference chips (AI mode only) */}
@@ -2776,8 +2406,6 @@ function HikeSearchContent() {
                     onCompareToggle={toggleCompare}
                     isComparing={compareList.some(ct => ct.name === trail.name)}
                     onStartHike={startHike}
-                    downloadProgress={downloadProgress?.id === `${trail.name}-${trail.lat}` ? downloadProgress : null}
-                    weather={weather}
                     searchMode={searchMode}
                   />
                 ) : (
@@ -2791,13 +2419,12 @@ function HikeSearchContent() {
                     onSave={handleSaveHike}
                     isSaved={savedIds.has(`${trail.name}-${trail.lat}`)}
                     onStartHike={startHike}
-                    downloadProgress={downloadProgress?.id === `${trail.name}-${trail.lat}` ? downloadProgress : null}
                   />
                 )
                 )
               )}
               <p className="text-center text-slate-600 text-xs pb-4">
-                {source === 'ai' ? 'Detailed match · weather and preferences included' : 'Quick result · location and filters'}
+                Verified catalog results · check official conditions before hiking
               </p>
               
               {hasMore && (
@@ -2819,6 +2446,14 @@ function HikeSearchContent() {
               )}
             </div>
           </>
+        )}
+
+        {status === 'done' && !hasTrails && (
+          <div className="m-6 rounded-2xl border border-amber-500/30 bg-amber-950/30 p-6 text-center">
+            <p className="text-lg font-semibold text-amber-100">No verified trails found</p>
+            <p className="mt-2 text-sm leading-relaxed text-amber-100/70">{coverageMessage || 'Verified trail coverage is currently available for Yosemite National Park.'}</p>
+            <button type="button" onClick={() => { setSearchQuery('Yosemite National Park'); setStatus('idle'); }} className="mt-5 rounded-xl bg-amber-200 px-5 py-2.5 text-sm font-bold text-amber-950">Search Yosemite</button>
+          </div>
         )}
 
         {/* ── Idle / search input state ── */}
@@ -2883,94 +2518,12 @@ function HikeSearchContent() {
               </div>
             </div>
 
-            {/* Search radius and food price */}
-            <div className="flex flex-col gap-6">
-              <div>
-                <p className="text-slate-500 text-xs mb-2">Radius</p>
-                <div className="flex gap-2">
-                  {[5, 15, 25, 50].map((r) => (
-                    <button
-                      key={r}
-                      onClick={() => setSearchRadius(r)}
-                      className={`flex-1 text-xs py-2 rounded-xl border transition-all font-medium ${
-                        searchRadius === r ? 'bg-slate-600 border-slate-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
-                      }`}
-                    >
-                      {r} mi
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="text-slate-500 text-xs mb-2">Price (Food)</p>
-                <div className="flex gap-2">
-                  {['', 'Under $10', '$10 - $15', '$15 - $25', 'Over $25'].map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => setPriceRange(p)}
-                      className={`flex-1 text-xs py-2 rounded-xl border transition-all font-medium ${
-                        priceRange === p ? 'bg-slate-600 border-slate-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
-                      }`}
-                    >
-                      {p === '' ? 'Any' : p}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Group planning */}
-            <div>
-              <button
-                onClick={() => setGroupMode((g) => !g)}
-                className={`flex items-center gap-2 text-sm font-medium transition-colors ${groupMode ? 'text-indigo-400' : 'text-slate-400 hover:text-white'}`}
-              >
-                <span className={`w-5 h-5 rounded flex items-center justify-center text-xs border transition-colors ${groupMode ? 'bg-indigo-600 border-indigo-500 text-white' : 'border-slate-600 text-slate-500'}`}>
-                  {groupMode ? '✓' : '+'}
-                </span>
-                Planning for a group?
-              </button>
-              {groupMode && (
-                <textarea
-                  value={groupDescription}
-                  onChange={(e) => setGroupDescription(e.target.value)}
-                  placeholder="e.g. I'm fit, my partner has bad knees, and our 6yo is coming"
-                  rows={2}
-                  className="w-full mt-2.5 bg-slate-800 border border-slate-600 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none"
-                />
-              )}
-            </div>
-
-            {/* Search Mode Toggle */}
-            <div className="flex items-center justify-center gap-3 mb-3">
-              <button
-                onClick={() => setSearchMode('fast')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  searchMode === 'fast'
-                    ? 'bg-emerald-500 text-white shadow-lg'
-                    : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
-                }`}
-              >
-                ⚡ Fast
-              </button>
-              <button
-                onClick={() => setSearchMode('ai')}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  searchMode === 'ai'
-                    ? 'bg-indigo-500 text-white shadow-lg'
-                    : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
-                }`}
-              >
-                Detailed Search
-              </button>
-            </div>
-
             <button
               onClick={() => runSearch()}
               disabled={isOffline}
               className="w-full py-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 disabled:from-slate-600 disabled:to-slate-700 text-white font-bold rounded-2xl shadow-lg transition-all duration-300 text-base"
             >
-              {isOffline ? 'Offline - Connect to search' : searchMode === 'ai' ? 'Detailed Search →' : 'Quick Search →'}
+              {isOffline ? 'Offline - Connect to search' : 'Search verified trails →'}
             </button>
           </div>
         )}

@@ -2,6 +2,15 @@ Copyright (c) 2026 Shilpi Sharma
 
 All Rights Reserved.
 
-This code and its associated documentation are the proprietary property of Shilpi Sharma. 
-You may not use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies 
-of this code without explicit, written permission from the copyright owner.
+Except where a file, directory, dependency, dataset, asset, or earlier release states otherwise, original Odyssey source code and documentation in the current repository are proprietary. You may not use, copy, modify, merge, publish, distribute, sublicense, or sell that original material without explicit written permission from the copyright owner.
+
+This notice does not override or restrict:
+
+1. third-party software licenses and notices listed in THIRD_PARTY_NOTICES.md;
+2. OpenStreetMap data licensed under the Open Database License (ODbL) 1.0;
+3. U.S. federal government works that are not eligible for U.S. copyright protection, including qualifying National Park Service material;
+4. third-party material embedded in or linked from government sources;
+5. trademarks or publicity, privacy, contractual, database, or other rights; or
+6. rights granted for earlier Odyssey revisions that were released under the MIT License. Those earlier grants remain governed by the license accompanying those revisions.
+
+Source-specific attribution and terms are documented in docs/catalog-sources.md and in the application’s Data Sources and Licenses pages.

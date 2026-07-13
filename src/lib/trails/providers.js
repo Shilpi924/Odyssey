@@ -1,4 +1,4 @@
-import { elevationStats, relationToMultiLineString } from './geometry.js';
+import { relationToMultiLineString } from './geometry.js';
 
 export async function fetchOsmRelationGeometry(relationId, fetchImpl = fetch) {
   if (!/^\d+$/.test(String(relationId))) throw new Error('Invalid OSM relation ID');
@@ -6,7 +6,7 @@ export async function fetchOsmRelationGeometry(relationId, fetchImpl = fetch) {
   const url = new URL('https://overpass-api.de/api/interpreter');
   url.searchParams.set('data', query);
   const response = await fetchImpl(url, {
-    headers: { Accept: 'application/json', 'User-Agent': 'Odyssey/0.1 trail-catalog' },
+    headers: { Accept: 'application/json', 'User-Agent': 'Odyssey/0.1 (+https://github.com/Shilpi924/Odyssey)' },
     next: { revalidate: 86400 },
   });
   if (!response.ok) throw new Error(`OpenStreetMap geometry request failed (${response.status})`);
@@ -14,26 +14,6 @@ export async function fetchOsmRelationGeometry(relationId, fetchImpl = fetch) {
   const relation = data.elements?.find(element => element.type === 'relation');
   if (!relation) throw new Error('OpenStreetMap relation not found');
   return relationToMultiLineString(relation);
-}
-
-export async function fetchElevationProfile(coordinates, apiKey, fetchImpl = fetch) {
-  if (!apiKey) return null;
-  const points = coordinates.filter((_, index) => index % Math.max(1, Math.ceil(coordinates.length / 200)) === 0).slice(0, 200);
-  if (points.length < 2) return null;
-  const locations = points.map(([lng, lat]) => `${lat},${lng}`).join('|');
-  const url = new URL('https://maps.googleapis.com/maps/api/elevation/json');
-  url.searchParams.set('locations', locations);
-  url.searchParams.set('key', apiKey);
-  const response = await fetchImpl(url, { next: { revalidate: 604800 } });
-  if (!response.ok) throw new Error(`Elevation request failed (${response.status})`);
-  const data = await response.json();
-  if (data.status !== 'OK') throw new Error(`Elevation provider returned ${data.status}`);
-  const samples = data.results.map(result => ({
-    lat: result.location.lat,
-    lng: result.location.lng,
-    elevationFeet: result.elevation * 3.28084,
-  }));
-  return { samples, ...elevationStats(samples) };
 }
 
 export async function fetchNpsAlerts(parkCode, apiKey, fetchImpl = fetch) {

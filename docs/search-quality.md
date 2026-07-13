@@ -48,7 +48,7 @@ Precision is judged against human-labeled relevant results. Famous-trail recall 
 ## Phase 1 completion criteria
 
 - One reusable canonical schema exists and validates unsafe values.
-- Existing Google-style result objects can be normalized into it.
+- Legacy result objects can be normalized into it without importing provider-specific assumptions.
 - Search-quality targets are executable constants rather than informal goals.
 - Seed benchmarks cover exact trail, park, region, filtered, and nearby searches.
 - Unit tests protect the schema and quality contract.

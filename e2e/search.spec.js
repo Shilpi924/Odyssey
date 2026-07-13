@@ -41,6 +41,8 @@ test.describe('Search Page Flow', () => {
     await expect(page.getByText('Current National Park Service alerts')).toBeVisible();
     await expect(page.getByText('Route geometry: OpenStreetMap')).toBeVisible();
     await expect(page.getByText('Permit required')).toBeVisible();
+    await expect(page.getByRole('button', { name: /Dog Friendly/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /4\+ Stars/ })).toHaveCount(0);
     await result.click();
     await expect(page.getByRole('button', { name: '🚶 Start Hike' }).last()).toBeVisible();
     await expect(page.getByRole('button', { name: '🗺️ Map' }).last()).toBeVisible();
@@ -49,5 +51,21 @@ test.describe('Search Page Flow', () => {
     const resultBox = await result.boundingBox();
     const mapBox = await page.locator('#trail-map').boundingBox();
     expect(mapBox.y).toBeGreaterThan(resultBox.y);
+  });
+
+  test('shows an explicit coverage boundary instead of provider guesses', async ({ page }) => {
+    const browserErrors = [];
+    page.on('console', message => {
+      if (message.type() === 'error') browserErrors.push(message.text());
+    });
+    page.on('pageerror', error => browserErrors.push(error.message));
+    await page.addInitScript(() => localStorage.setItem('odyssey_search_history', JSON.stringify(['Half Dome'])));
+    await page.goto('/search?q=Zion%20National%20Park');
+    await expect(page.getByText('No verified trails found')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('Verified trail coverage is currently available for Yosemite National Park.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Search Yosemite' })).toBeVisible();
+    await expect(page.getByText('37.865, -119.538')).toHaveCount(0);
+    await expect(page.getByText('Recent Searches')).toBeVisible();
+    expect(browserErrors.filter(message => message.includes('Hydration failed'))).toEqual([]);
   });
 });

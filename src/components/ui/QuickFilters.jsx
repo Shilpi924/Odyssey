@@ -4,15 +4,12 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 
 const FILTERS = [
-  { id: 'distance', label: 'Under 5mi', icon: '📍' },
   { id: 'easy', label: 'Easy', icon: '🟢' },
   { id: 'moderate', label: 'Moderate', icon: '🟡' },
-  { id: 'rating', label: '4+ Stars', icon: '⭐' },
-  { id: 'dog', label: 'Dog Friendly', icon: '🐾' },
   { id: 'scenic', label: 'Scenic', icon: '📸' },
 ];
 
-export default function QuickFilters({ trails, onFilter, activeFilters }) {
+export default function QuickFilters({ onFilter, activeFilters }) {
   const [selected, setSelected] = useState(activeFilters || []);
 
   const toggleFilter = (filterId) => {

@@ -2,6 +2,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import AuthWrapper from "@/components/AuthWrapper";
 import BottomNavigation from "@/components/layout/BottomNavigation";
+import LegalFooter from "@/components/layout/LegalFooter";
 import { cookies } from "next/headers";
 import { parseDisplayPreferences, THEME_COOKIE } from "@/lib/theme";
 
@@ -17,7 +18,7 @@ const geistMono = Geist_Mono({
 
 export const metadata = {
   title: "Odyssey — Trail intelligence for every group",
-  description: "Personalized hiking recommendations, offline-ready trail maps, and live GPS tracking.",
+  description: "Sourced Yosemite trail discovery, saved trail facts, official alerts, and local GPS tracking.",
   manifest: "/manifest.json",
 };
 
@@ -38,6 +39,7 @@ export default async function RootLayout({ children }) {
     >
       <body className="min-h-full flex flex-col transition-colors duration-300">
         <AuthWrapper initialDisplay={initialDisplay}>{children}</AuthWrapper>
+        <LegalFooter />
         <BottomNavigation />
       </body>
     </html>

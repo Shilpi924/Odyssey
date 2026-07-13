@@ -1,26 +1,27 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
 export async function POST(request) {
   try {
     const { trail, question, history } = await request.json();
+    if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: 'Trail Guide is not configured' }, { status: 503 });
+    if (!trail?.name || !question?.trim()) return NextResponse.json({ error: 'Trail and question are required' }, { status: 400 });
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    const system = `You are a friendly, knowledgeable local hiking guide who has personally hiked "${trail.name}" many times across all seasons.
+    const system = `You are a cautious hiking information assistant. Answer only from the supplied trail record and clearly label general advice. Never claim personal experience or current local knowledge.
 
-What you know about this trail:
-- Length: ${trail.length || 'varies'}
+Supplied trail record for "${trail.name}":
+- Length: ${trail.length || 'not supplied'}
 - Difficulty: ${trail.difficulty || 'unknown'}
 - Elevation gain: ${trail.elevationGain || 'unknown'}
 - Features: ${trail.features?.join(', ') || 'general trail'}
 - Your tip: "${trail.tip || 'No specific tip'}"
-- Best time: "${trail.bestTime || 'Anytime'}"
+- Best time: "${trail.bestTime || 'not supplied'}"
 - Parking: "${trail.parkingNote || 'Check locally'}"
 
-Speak as someone who genuinely loves this trail and wants the user to have a great experience. Be conversational, specific, and practical. Keep answers to 2–4 sentences unless the question clearly needs more.
+Be conversational, specific, and practical. Keep answers to 2–4 sentences unless the question clearly needs more. Do not invent facts that are absent from the record.
 
-If asked about real-time things you can't know (current conditions, trail closures, live crowd data), be upfront about it but give your best general advice from experience.
+If asked about real-time things you can't know (current conditions, trail closures, live crowd data), be upfront about it, offer cautious general guidance, and tell the user to verify an official source.
 
 -------------------
 SAFETY MANDATE:
@@ -28,7 +29,7 @@ When a user states that they are lost, injured, stranded, disoriented, or unable
 - Keep the response short, calm, and easy to follow.
 - Do not invent trails, landmarks, coordinates, distances, compass directions, or rescue information.
 - Instruct them to remain calm, stop moving, and utilize the on-screen deterministic Safety Controls.
-- Suggest checking the offline map, recorded route, and sharing coordinates with emergency contacts.`;
+- Suggest checking the locally recorded route and sharing coordinates with emergency contacts.`;
 
     const messages = [
       ...(history || []).map((m) => ({ role: m.role, content: m.content })),

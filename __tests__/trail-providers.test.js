@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
 import { elevationStats, geometryDistanceMiles, relationToMultiLineString, stitchLineSegments } from '../src/lib/trails/geometry.js';
-import { fetchElevationProfile, fetchNpsAlerts, fetchNpsParkBoundary, fetchOsmRelationGeometry } from '../src/lib/trails/providers.js';
+import { fetchNpsAlerts, fetchNpsParkBoundary, fetchOsmRelationGeometry } from '../src/lib/trails/providers.js';
 
 describe('route geometry', () => {
   it('stitches adjacent and reversed segments', () => {
@@ -44,20 +44,6 @@ describe('live-data providers', () => {
   it('rejects invalid provider identifiers before making a request', async () => {
     await expect(fetchOsmRelationGeometry('bad')).rejects.toThrow('Invalid OSM relation ID');
     await expect(fetchNpsAlerts('../bad', 'secret')).rejects.toThrow('Invalid NPS park code');
-  });
-
-  it('samples elevation and converts meters to feet', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ status: 'OK', results: [
-      { elevation: 100, location: { lat: 1, lng: 2 } },
-      { elevation: 120, location: { lat: 3, lng: 4 } },
-    ] }) });
-    const result = await fetchElevationProfile([[2, 1], [4, 3]], 'secret', fetchImpl);
-    expect(result.samples).toHaveLength(2);
-    expect(result.elevationGainFeet).toBe(66);
-  });
-
-  it('skips elevation when the server key is absent', async () => {
-    expect(await fetchElevationProfile([[0, 0], [1, 1]], '')).toBeNull();
   });
 
   it('normalizes official NPS boundary geometry', async () => {
