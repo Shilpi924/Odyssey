@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { mockedStadiaStyle, mockedTrailResponse } from './fixtures.js';
 
 test.describe('Personalization Flow', () => {
   test('should allow user to select preferences and save to localStorage', async ({ page }) => {
@@ -72,5 +73,63 @@ test.describe('Personalization Flow', () => {
     const preferences = await page.evaluate(() => JSON.parse(localStorage.getItem('userPreferences')));
     expect(preferences.theme).toBe('sunset');
     expect(preferences.highContrast).toBe(true);
+  });
+
+  test('clears only scoped Odyssey browser data', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('odyssey_search_history', JSON.stringify(['Half Dome']));
+      localStorage.setItem('odysseyHikePlan', JSON.stringify({ location: 'Yosemite' }));
+      localStorage.setItem('userPreferences', JSON.stringify({ interests: ['Hiking'] }));
+      localStorage.setItem('odyssey_location_access_v1', 'allowed');
+      localStorage.setItem('unrelated_test_key', 'keep');
+      sessionStorage.setItem('odyssey_verified_search_cache_v1', JSON.stringify({ trails: [] }));
+    });
+    page.on('dialog', dialog => dialog.accept());
+
+    await page.goto('/personalize');
+    await page.getByRole('button', { name: 'Clear searches & plan' }).click();
+    await expect(page.getByRole('status')).toContainText('Search, planning, and cached result data were cleared');
+    let stored = await page.evaluate(() => ({
+      history: localStorage.getItem('odyssey_search_history'),
+      plan: localStorage.getItem('odysseyHikePlan'),
+      preferences: localStorage.getItem('userPreferences'),
+      cache: sessionStorage.getItem('odyssey_verified_search_cache_v1'),
+    }));
+    expect(stored).toEqual({ history: null, plan: null, preferences: JSON.stringify({ interests: ['Hiking'] }), cache: null });
+
+    await page.getByRole('button', { name: 'Clear all local data' }).click();
+    await expect(page.getByRole('status')).toContainText('All scoped Odyssey data stored by this browser was cleared');
+    stored = await page.evaluate(() => ({
+      preferences: localStorage.getItem('userPreferences'),
+      location: localStorage.getItem('odyssey_location_access_v1'),
+      unrelated: localStorage.getItem('unrelated_test_key'),
+    }));
+    expect(stored).toEqual({ preferences: null, location: null, unrelated: 'keep' });
+  });
+
+  test('deletes saved trail records from IndexedDB', async ({ page }) => {
+    await page.route('**/api/fast-search', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(mockedTrailResponse) }));
+    await page.route('https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(mockedStadiaStyle) }));
+    await page.route('**/api/park-alerts?parkCode=yose', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ available: true, alerts: [] }) }));
+    page.on('dialog', dialog => dialog.accept());
+
+    await page.goto('/search?q=Yosemite&difficulty=Strenuous', { waitUntil: 'domcontentloaded' });
+    const trailHeading = page.getByRole('heading', { name: 'Half Dome via the John Muir Trail', level: 3 });
+    await expect(trailHeading).toBeVisible({ timeout: 15_000 });
+    await trailHeading.click();
+    await page.getByRole('button', { name: /Save Trail/ }).click();
+    await expect(page.getByRole('button', { name: /Saved/ })).toBeVisible();
+
+    await page.getByRole('link', { name: /Saved/ }).click();
+    await expect(page).toHaveURL('/saved');
+    await expect(page.getByRole('heading', { name: 'Half Dome via the John Muir Trail', level: 3 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Show your position on saved trails?' })).toBeVisible();
+
+    await page.goto('/personalize');
+    await page.getByRole('button', { name: 'Delete saved trails & GPS' }).click();
+    await expect(page.getByRole('status')).toContainText('Saved trails and on-device GPS records were deleted');
+
+    await page.goto('/saved');
+    await expect(page.getByText('No saved hikes')).toBeVisible();
   });
 });

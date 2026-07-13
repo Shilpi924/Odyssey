@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useSession, signIn, signOut } from 'next-auth/react';
 import { applyDisplayPreferences } from '@/components/ThemeProvider';
+import LocalDataControls from '@/components/privacy/LocalDataControls';
 import { DEFAULT_THEME, THEMES, resolveTheme } from '@/lib/theme';
 
 function PillButton({ label, selected, onClick, color = 'indigo' }) {
@@ -396,6 +397,8 @@ export default function Personalize() {
             </button>
           )}
         </div>
+
+        <LocalDataControls signedIn={Boolean(session?.user)} />
 
         <div className="mt-8 flex justify-between items-center border-t border-slate-700 pt-8">
           <Link href="/">

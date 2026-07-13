@@ -51,13 +51,26 @@ describe('provider and licensing guardrails', () => {
     const privacy = readFileSync(join(root, 'src/app/legal/privacy/page.js'), 'utf8');
     const terms = readFileSync(join(root, 'src/app/legal/terms/page.js'), 'utf8');
     const readiness = readFileSync(join(root, 'docs/legal/US_CALIFORNIA_LAUNCH_READINESS.md'), 'utf8');
-    for (const disclosure of ['Do Not Track', 'Global Privacy Control', 'Access, correction, and deletion', 'Changes to this notice']) {
+    for (const disclosure of ['Do Not Track', 'Global Privacy Control', 'Location choice', 'Access, correction, and deletion', 'Changes to this notice']) {
       expect(privacy).toContain(disclosure);
     }
     expect(terms).toContain('not directed to children under 13');
     expect(readiness).toContain('Strongly recommended counsel review');
     expect(readiness).toContain('There is no general rule that a software publisher must hire an attorney');
     expect(readiness).toContain('Required engineering and operator decisions before production');
+  });
+
+  it('gates precise location and exposes scoped local-data controls', () => {
+    const search = readFileSync(join(root, 'src/app/search/page.js'), 'utf8');
+    const saved = readFileSync(join(root, 'src/app/saved/page.js'), 'utf8');
+    const theme = readFileSync(join(root, 'src/components/ThemeProvider.jsx'), 'utf8');
+    const controls = readFileSync(join(root, 'src/components/privacy/LocalDataControls.jsx'), 'utf8');
+    expect(search).toContain("setStatus('location')");
+    expect(search).toContain('Allow location &amp; start');
+    expect(saved).toContain('locationAllowed');
+    expect(theme).toContain('hasLocationAccess()');
+    expect(controls).toContain('Clear all local data');
+    expect(controls).not.toContain('localStorage.clear()');
   });
 
   it('keeps secrets out of the browser-facing environment template', () => {

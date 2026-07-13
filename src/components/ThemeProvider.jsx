@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
+import { hasLocationAccess } from '@/lib/location-access';
 import { DEFAULT_THEME, isDaylight, normalizeDisplayPreferences, resolveTheme, serializeDisplayPreferences, THEME_COOKIE } from '@/lib/theme';
 
 export function applyDisplayPreferences(preferences = {}, environment = {}) {
@@ -33,7 +34,7 @@ export default function ThemeProvider({ children, initialDisplay }) {
       // Ignore malformed local preferences and retain the server-provided display.
     }
     const theme = applyDisplayPreferences(preferences, { persistCookie: true });
-    if (normalizeDisplayPreferences(preferences).themeMode === 'scheduled' && navigator.geolocation) {
+    if (normalizeDisplayPreferences(preferences).themeMode === 'scheduled' && hasLocationAccess() && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         ({ coords }) => applyDisplayPreferences(preferences, { coords, persistCookie: true }),
         () => {},

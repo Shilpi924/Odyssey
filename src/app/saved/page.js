@@ -4,6 +4,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { db } from '@/lib/db';
 import { MAP_CONFIG } from '@/lib/map-style';
+import LocationAccessCard from '@/components/privacy/LocationAccessCard';
+import useLocationAccess from '@/hooks/useLocationAccess';
 import Map, { AttributionControl, Marker, Source, Layer } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import maplibregl from 'maplibre-gl';
@@ -70,6 +72,7 @@ export default function SavedHikesPage() {
   const [mapRevision, setMapRevision] = useState(0);
   const mapRef = useRef(null);
   const cardRefs = useRef([]);
+  const { locationAllowed, allowLocation, forgetLocation } = useLocationAccess();
 
   const loadQuota = async () => {
     if (navigator.storage && navigator.storage.estimate) {
@@ -97,14 +100,17 @@ export default function SavedHikesPage() {
 
   // Track live GPS
   useEffect(() => {
-    if (!navigator.geolocation) return;
+    if (!locationAllowed || savedHikes.length === 0 || !navigator.geolocation) return;
     const watchId = navigator.geolocation.watchPosition(
       (pos) => setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      (err) => console.log('GPS error', err),
+      (err) => {
+        if (err.code === 1) forgetLocation();
+        console.log('GPS error', err);
+      },
       { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
     );
     return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
+  }, [locationAllowed, savedHikes.length, forgetLocation]);
 
   const removeHike = async (hike) => {
     await db.savedHikes.delete(hike.id);
@@ -348,6 +354,17 @@ export default function SavedHikesPage() {
                 <p className="font-semibold">Basemap temporarily unavailable</p>
                 <p className="mt-1 text-xs text-slate-300">Your saved trail facts are still available. Do not rely on this map for navigation.</p>
                 <button type="button" onClick={() => { setMapError(false); setMapRevision(revision => revision + 1); }} className="mt-3 rounded-lg border border-amber-300/40 px-3 py-1.5 text-xs font-semibold hover:bg-amber-300/10">Retry map</button>
+              </div>
+            )}
+            {!locationAllowed && !mapError && (
+              <div className="absolute left-4 right-16 top-4 z-30 max-w-md">
+                <LocationAccessCard
+                  compact
+                  title="Show your position on saved trails?"
+                  description="Your current position is used to orient this map. Saved GPS trail history remains on this device and is not uploaded."
+                  allowLabel="Show my location"
+                  onAllow={allowLocation}
+                />
               </div>
             )}
           </div>

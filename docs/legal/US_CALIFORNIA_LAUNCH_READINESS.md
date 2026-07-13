@@ -18,7 +18,7 @@ Personal development and evaluation on `localhost` can continue without a Stadia
 
 ### Closed tester evaluation
 
-Before inviting testers, use a controlled staging URL and register that staging host with Stadia domain authentication. Confirm that the evaluation remains noncommercial and within the provider’s free-plan terms and credit limits; otherwise upgrade first. Display the Privacy Notice and beta/safety warning, provide a private feedback channel, add contextual permission before the first precise-location request, and keep payments, advertising, analytics, public profiles, community uploads, and cloud GPS history disabled.
+Before inviting testers, use a controlled staging URL and register that staging host with Stadia domain authentication. Confirm that the evaluation remains noncommercial and within the provider’s free-plan terms and credit limits; otherwise upgrade first. Display the Privacy Notice and beta/safety warning, provide a private feedback channel, verify the contextual permission shown before the first precise-location request, and keep payments, advertising, analytics, public profiles, community uploads, and cloud GPS history disabled.
 
 ### Public production release
 
@@ -45,7 +45,7 @@ Recheck this inventory against runtime code, deployed configuration, provider co
 
 Privacy, security, safety, and performance statements must match actual behavior. Use data minimization, reasonable security, purpose limitation, and clear permission before collecting precise location. The FTC specifically recommends affirmative consent for precise geolocation and clear notice when location collection begins.
 
-Current engineering gap: Search and Saved Hikes can request geolocation when their pages load. Replace automatic first-use requests with a contextual user action and explanation before production. Active-hike recording must continue to require an intentional Start Hike action.
+Engineering control: Search and Saved Hikes gate their first geolocation request behind an Odyssey explanation and affirmative action. Planning requests location only from its Use My Current Location action, scheduled themes do not request location without a remembered Odyssey choice, and hike recording has a separate explanation before tracking starts. Reverify these controls in the deployed browser build before inviting testers.
 
 ### California Online Privacy Protection Act
 

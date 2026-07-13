@@ -65,6 +65,7 @@ npm run licenses
 - Catalog sourcing rules: [`docs/catalog-sources.md`](docs/catalog-sources.md)
 - Third-party software notices: [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)
 - Public app disclosures: `/legal/terms`, `/legal/privacy`, `/legal/data-sources`, `/legal/licenses`, and `/legal/copyright`
+- Profile controls can clear scoped search, planning, saved-trail, GPS, preference, cache, and in-app location-choice data from the current browser.
 - California-first engineering and counsel gates: [`docs/legal/US_CALIFORNIA_LAUNCH_READINESS.md`](docs/legal/US_CALIFORNIA_LAUNCH_READINESS.md)
 - Current original Odyssey code is proprietary except where stated otherwise. Earlier revisions released under MIT remain subject to those earlier grants. See [`LICENSE`](LICENSE).
 

@@ -1,21 +1,5 @@
 import { test, expect } from '@playwright/test';
-
-const mockedTrailResponse = {
-  source: 'catalog', weather: null, entity: { type: 'park', id: 'nps-yose' },
-  trails: [{ name: 'Half Dome via the John Muir Trail', lat: 37.7459, lng: -119.5332, distance: '2.5', difficulty: 'Strenuous', length: '16.2 miles', rating: null, userRatingsTotal: 0, features: ['Summit', 'Scenic'], sourceAttribution: 'Source: National Park Service', geometrySource: { provider: 'osm' }, access: { status: 'Unknown', permitRequired: true } }],
-};
-
-const mockedStadiaStyle = {
-  version: 8,
-  sources: {
-    attribution: {
-      type: 'geojson',
-      data: { type: 'FeatureCollection', features: [] },
-      attribution: '© <a href="https://stadiamaps.com/">Stadia Maps</a> © <a href="https://openmaptiles.org/">OpenMapTiles</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    },
-  },
-  layers: [{ id: 'attribution', type: 'circle', source: 'attribution' }],
-};
+import { mockedStadiaStyle, mockedTrailResponse } from './fixtures.js';
 
 test.describe('Search Page Flow', () => {
   // Use a mocked geolocation
@@ -36,6 +20,50 @@ test.describe('Search Page Flow', () => {
     const header = page.locator('h1:has-text("🥾 Hikes Near Me")');
     
     await expect(header).toBeVisible();
+  });
+
+  test('explains location use before starting a nearby search', async ({ page }) => {
+    await page.route('**/api/fast-search', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(mockedTrailResponse) }));
+    await page.route('https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(mockedStadiaStyle) }));
+    await page.route('**/api/park-alerts?parkCode=yose', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ available: true, alerts: [] }) }));
+
+    await page.goto('/search?nearme=true');
+    await expect(page.getByRole('heading', { name: 'Use your location for nearby trails?' })).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem('odyssey_location_access_v1'))).toBeNull();
+
+    await page.getByRole('button', { name: 'Allow location' }).click();
+    await expect(page.getByRole('heading', { name: 'Half Dome via the John Muir Trail', level: 3 })).toBeVisible({ timeout: 15_000 });
+    expect(await page.evaluate(() => localStorage.getItem('odyssey_location_access_v1'))).toBe('allowed');
+  });
+
+  test('can search Yosemite without granting location', async ({ page }) => {
+    await page.route('**/api/fast-search', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(mockedTrailResponse) }));
+    await page.route('https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(mockedStadiaStyle) }));
+    await page.route('**/api/park-alerts?parkCode=yose', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ available: true, alerts: [] }) }));
+
+    await page.goto('/search?nearme=true');
+    await page.getByRole('button', { name: 'Search Yosemite instead' }).click();
+    await expect(page.getByRole('heading', { name: 'Half Dome via the John Muir Trail', level: 3 })).toBeVisible({ timeout: 15_000 });
+    expect(await page.evaluate(() => localStorage.getItem('odyssey_location_access_v1'))).toBeNull();
+  });
+
+  test('handles denied location without retaining the in-app choice', async ({ page }) => {
+    await page.addInitScript(() => {
+      const denied = { code: 1, message: 'Permission denied' };
+      Object.defineProperty(navigator, 'geolocation', {
+        configurable: true,
+        value: {
+          getCurrentPosition: (_success, error) => queueMicrotask(() => error(denied)),
+          watchPosition: (_success, error) => { queueMicrotask(() => error(denied)); return 1; },
+          clearWatch: () => {},
+        },
+      });
+    });
+
+    await page.goto('/search?nearme=true');
+    await page.getByRole('button', { name: 'Allow location' }).click();
+    await expect(page.getByText('Location access denied. Please enable location in your browser.')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('odyssey_location_access_v1'))).toBeNull();
   });
 
   test('mobile results expand safely and render before the map', async ({ page }) => {
@@ -62,6 +90,10 @@ test.describe('Search Page Flow', () => {
     await expect(page.getByRole('button', { name: '🚶 Start Hike' }).last()).toBeVisible();
     await expect(page.getByRole('button', { name: '🗺️ Map' }).last()).toBeVisible();
     await expect(page.getByRole('button', { name: '🥾 Track' }).last()).toBeVisible();
+    await page.getByRole('button', { name: '🚶 Start Hike' }).last().click();
+    await expect(page.getByRole('heading', { name: 'Allow location to record this hike?' })).toBeVisible();
+    await page.getByRole('button', { name: 'Not now' }).click();
+    await expect(page.getByText('Active Hike', { exact: true })).toHaveCount(0);
 
     const resultBox = await result.boundingBox();
     const mapBox = await page.locator('#trail-map').boundingBox();

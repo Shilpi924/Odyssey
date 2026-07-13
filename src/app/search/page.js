@@ -12,6 +12,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import TrailCardSkeleton from '@/components/ui/TrailCardSkeleton';
 import QuickFilters from '@/components/ui/QuickFilters';
 import SearchHistory, { addToHistory } from '@/components/ui/SearchHistory';
+import LocationAccessCard from '@/components/privacy/LocationAccessCard';
+import useLocationAccess from '@/hooks/useLocationAccess';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -871,6 +873,7 @@ function HikeSearchContent() {
   const searchParams = useSearchParams();
   const query = searchParams.get('q');
   const mobileView = searchParams.get('view') || 'results';
+  const { locationAllowed, locationReady, allowLocation, forgetLocation } = useLocationAccess();
 
   // ── Search state
   const [status, setStatus] = useState('idle');
@@ -998,6 +1001,7 @@ function HikeSearchContent() {
   const [wakeLock, setWakeLock] = useState(null);
   const [recoveredHike, setRecoveredHike] = useState(null);
   const [showRecoveryModal, setShowRecoveryModal] = useState(false);
+  const [pendingHike, setPendingHike] = useState(null);
   
   const audioRef = useRef(null);
   const hikeTimingsRef = useRef({ startedAt: 0, totalPausedMs: 0, pausedAt: 0 });
@@ -1038,7 +1042,15 @@ function HikeSearchContent() {
   // ── Network status listener & Service Worker
   useEffect(() => {
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(console.error);
+      if (process.env.NODE_ENV === 'production') {
+        navigator.serviceWorker.register('/sw.js').catch(console.error);
+      } else {
+        // A production worker can otherwise serve stale bundles while developing
+        // or running browser tests on the same origin.
+        navigator.serviceWorker.getRegistrations()
+          .then(registrations => Promise.all(registrations.map(registration => registration.unregister())))
+          .catch(console.error);
+      }
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsOffline(!navigator.onLine);
@@ -1140,7 +1152,7 @@ function HikeSearchContent() {
 
   // ── Watch live GPS location
   useEffect(() => {
-    if (!navigator.geolocation) return;
+    if (!locationAllowed || isHiking || !navigator.geolocation) return;
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         const { accuracy } = pos.coords;
@@ -1165,6 +1177,7 @@ function HikeSearchContent() {
       (err) => {
         if (err.code === 1) {
           setGpsStatus('Denied');
+          forgetLocation();
         } else {
           setGpsStatus('Unavailable');
         }
@@ -1173,7 +1186,7 @@ function HikeSearchContent() {
       { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
     );
     return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
+  }, [locationAllowed, isHiking, forgetLocation]);
 
   // ── Request Persistent Storage
   useEffect(() => {
@@ -1320,7 +1333,7 @@ function HikeSearchContent() {
   }
 
   const runSearch = useCallback(
-    async (forceMode = null) => {
+    async (forceMode = null, locationAuthorized = false, destinationOverride = null) => {
       setStatus('locating');
       setTrails([]);
       setHasMore(true);
@@ -1332,24 +1345,30 @@ function HikeSearchContent() {
       setAlertsFetchedAt(null);
       setCoverageMessage('');
 
+      const requestedQuery = destinationOverride ?? searchQuery;
+      const knownDestination = knownSearchDestination(requestedQuery);
+      const needsDeviceLocation = !requestedQuery.trim() || /\b(?:near me|nearby)\b/i.test(requestedQuery);
+      if (needsDeviceLocation && !locationAllowed && !locationAuthorized) {
+        setStatus('location');
+        return;
+      }
+
       try {
-        const knownDestination = knownSearchDestination(searchQuery);
         // A named place search should not wait for device GPS. GPS is only needed
         // for "near me" searches and distance-from-me features.
-        const needsDeviceLocation = !searchQuery.trim() || /\b(?:near me|nearby)\b/i.test(searchQuery);
         const pos = knownDestination || !needsDeviceLocation ? null : await getLocation();
         const current = pos
           ? { lat: pos.coords.latitude, lng: pos.coords.longitude }
           : knownDestination || { lat: 37.8651, lng: -119.5383 };
         if (pos) setUserLocation(current);
-        const plannedDestination = knownDestination || (searchParams.get('plan') && searchQuery ? await getPlaceCoordinates(searchQuery) : null);
+        const plannedDestination = knownDestination || (searchParams.get('plan') && requestedQuery ? await getPlaceCoordinates(requestedQuery) : null);
         const lat = plannedDestination?.lat ?? current.lat;
         const lng = plannedDestination?.lng ?? current.lng;
         setMapCenter({ lat, lng });
 
         // Check if we have matching preloaded data
         let usePreload = false;
-        if (searchQuery === '' && preloadedData && preloadedKey) {
+        if (requestedQuery === '' && preloadedData && preloadedKey) {
           const keyParts = preloadedKey.split('|');
           const [pLat, pLng, pPrefs, pRadius, pPrice, pGroup] = keyParts;
           const latDiff = Math.abs(lat - parseFloat(pLat));
@@ -1380,14 +1399,14 @@ function HikeSearchContent() {
           return;
         }
 
-        const unsupportedNamedDestination = searchQuery.trim() && !needsDeviceLocation && !plannedDestination;
+        const unsupportedNamedDestination = requestedQuery.trim() && !needsDeviceLocation && !plannedDestination;
         const locName = plannedDestination?.name || (unsupportedNamedDestination ? '' : await getLocationName(lat, lng));
         setLocationName(locName);
         setStatus('searching');
 
         // Add to search history
-        if (searchQuery) {
-          addToHistory(searchQuery);
+        if (requestedQuery) {
+          addToHistory(requestedQuery);
         }
 
         // Use fast-search for default, smart-search for AI mode
@@ -1397,7 +1416,7 @@ function HikeSearchContent() {
               lat,
               lng,
               locationName: locName,
-              naturalLanguageQuery: searchQuery,
+              naturalLanguageQuery: requestedQuery,
               preferences,
               groupDescription: groupMode ? groupDescription : null,
               forceMode: 'ai',
@@ -1407,7 +1426,7 @@ function HikeSearchContent() {
           : {
               lat,
               lng,
-              query: searchQuery,
+              query: requestedQuery,
               preferences,
               radius: searchRadius,
               priceRange: priceRange || null,
@@ -1444,6 +1463,7 @@ function HikeSearchContent() {
         }
 
       } catch (err) {
+        if (err.code === 1) forgetLocation();
         setError(
           err.code === 1
             ? 'Location access denied. Please enable location in your browser.'
@@ -1452,7 +1472,7 @@ function HikeSearchContent() {
         setStatus('error');
       }
     },
-    [searchQuery, searchMode, preferences, groupMode, groupDescription, searchRadius, preloadedData, preloadedKey, priceRange, searchParams]
+    [searchQuery, searchMode, preferences, groupMode, groupDescription, searchRadius, preloadedData, preloadedKey, priceRange, searchParams, locationAllowed, forgetLocation]
   );
 
   // Filtering is derived data; memoization avoids a second render and stale results.
@@ -1495,7 +1515,7 @@ function HikeSearchContent() {
 
   // Auto-trigger when navigated from home
   useEffect(() => {
-    if (status !== 'idle' || !preferencesReady) return;
+    if (status !== 'idle' || !preferencesReady || !locationReady) return;
     
     sessionStorage.removeItem('odyssey_search_cache');
     const cached = sessionStorage.getItem('odyssey_verified_search_cache_v1');
@@ -1519,8 +1539,8 @@ function HikeSearchContent() {
       } catch (e) {}
     }
 
-    if (query && status === 'idle') runSearch();
-  }, [query, preferencesReady]); // eslint-disable-line
+    if ((query || searchParams.get('nearme') === 'true') && status === 'idle') runSearch();
+  }, [query, preferencesReady, locationReady]); // eslint-disable-line
 
   const selectTrail = (idx) => {
     const next = idx === selectedIdx ? null : idx;
@@ -1543,7 +1563,15 @@ function HikeSearchContent() {
     return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
   };
 
-  const startHike = (trail, isRestored = false, isRestoredPaused = false) => {
+  const startHike = (trail, isRestored = false, isRestoredPaused = false, locationAuthorized = false) => {
+    if (!navigator.geolocation) {
+      window.alert('GPS is not available in this browser, so hike tracking cannot start.');
+      return;
+    }
+    if (!locationAllowed && !locationAuthorized) {
+      setPendingHike({ trail, isRestored, isRestoredPaused });
+      return;
+    }
     if (!isRestored && userLocation) {
       const distance = calculateDistanceMiles(userLocation.lat, userLocation.lng, trail.lat, trail.lng);
       if (distance > 3.0) {
@@ -1937,7 +1965,33 @@ function HikeSearchContent() {
 
   return (
     <div className="flex flex-col min-h-screen md:h-screen bg-slate-900 font-sans overflow-visible md:overflow-hidden pb-24 md:pb-0">
- 
+
+      {pendingHike && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="hike-location-title">
+          <div className="w-full max-w-md rounded-3xl border border-emerald-400/30 bg-slate-900 p-6 shadow-2xl">
+            <p className="text-xs font-semibold uppercase tracking-[.16em] text-emerald-300">Before tracking</p>
+            <h2 id="hike-location-title" className="mt-2 text-xl font-bold text-white">Allow location to record this hike?</h2>
+            <p className="mt-3 text-sm leading-relaxed text-slate-300">Odyssey will record GPS points for distance and route tracking. Those points stay in this browser on this device and are not uploaded by the current app.</p>
+            <p className="mt-2 text-xs text-amber-200/80">This is not emergency navigation. Carry an independent map and verify official conditions.</p>
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => {
+                  const request = pendingHike;
+                  allowLocation();
+                  setPendingHike(null);
+                  startHike(request.trail, request.isRestored, request.isRestoredPaused, true);
+                }}
+                className="rounded-xl bg-emerald-400 px-4 py-2.5 text-sm font-bold text-emerald-950 hover:bg-emerald-300"
+              >
+                Allow location &amp; start
+              </button>
+              <button type="button" onClick={() => setPendingHike(null)} className="rounded-xl border border-slate-600 px-4 py-2.5 text-sm font-semibold text-slate-200 hover:bg-slate-800">Not now</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Active Hike Recovery Modal ── */}
       {showRecoveryModal && recoveredHike && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[999] flex items-center justify-center p-4">
@@ -2299,6 +2353,25 @@ function HikeSearchContent() {
           <>
 
         {/* Loading states */}
+        {status === 'location' && (
+          <div className="mx-auto w-full max-w-xl p-6 pt-12">
+            <LocationAccessCard
+              title="Use your location for nearby trails?"
+              description="Odyssey sends your current coordinates to its search service for this nearby search. GPS trail history is recorded only after you start a hike and remains on this device."
+              onAllow={() => {
+                allowLocation();
+                runSearch(null, true);
+              }}
+              alternativeLabel="Search Yosemite instead"
+              onAlternative={() => {
+                const destination = 'Yosemite National Park';
+                setSearchQuery(destination);
+                runSearch(null, false, destination);
+              }}
+            />
+          </div>
+        )}
+
         {status === 'locating' && (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
             <div className="w-10 h-10 rounded-full border-4 border-indigo-500 border-t-transparent animate-spin" />

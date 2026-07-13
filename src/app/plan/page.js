@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Logo from '@/components/Logo';
+import { allowLocationAccess, forgetLocationAccess } from '@/lib/location-access';
 
 const steps = ['Location', 'Your group', 'Trail fit', 'Review'];
 const groups = ['Solo', 'Partner', 'Friends', 'Family with children', 'Older adults', 'Dog'];
@@ -35,11 +36,15 @@ export default function PlanPage() {
 
   const useCurrentLocation = () => {
     if (!navigator.geolocation) return;
+    allowLocationAccess();
     setLocating(true);
     navigator.geolocation.getCurrentPosition(() => {
       setOne('location', 'near me');
       setLocating(false);
-    }, () => setLocating(false), { enableHighAccuracy: true, timeout: 10000 });
+    }, (error) => {
+      if (error.code === 1) forgetLocationAccess();
+      setLocating(false);
+    }, { enableHighAccuracy: true, timeout: 10000 });
   };
 
   return (
@@ -58,7 +63,7 @@ export default function PlanPage() {
         </div>
 
         <section className="rounded-3xl border border-[var(--app-border)] bg-[var(--app-surface)] p-6 sm:p-10 shadow-2xl min-h-[440px] transition-colors">
-          {step === 0 && <div className="max-w-2xl"><p className="text-sm text-[#d9a14a]">Step 1 of 4</p><h1 className="mt-2 text-3xl sm:text-4xl font-semibold tracking-tight">Where do you want to hike?</h1><p className="mt-3 text-stone-400">Verified coverage currently includes Yosemite National Park. Current-location search works when you are inside that coverage area.</p><label className="block mt-9 text-sm font-semibold" htmlFor="location">Destination</label><div className="mt-2 flex rounded-xl border border-white/15 bg-black/20 p-2 focus-within:border-emerald-300"><span className="px-3 py-2 text-emerald-300">⌖</span><input id="location" autoFocus value={form.location} onChange={(e) => setOne('location', e.target.value)} onKeyDown={(e) => e.key === 'Enter' && canContinue && setStep(1)} placeholder={locating ? 'Finding your location…' : 'Try Yosemite National Park'} disabled={locating} className="w-full bg-transparent px-1 text-lg outline-none placeholder:text-stone-600 disabled:opacity-70" /></div><button type="button" onClick={useCurrentLocation} disabled={locating} className="mt-4 text-sm font-semibold text-emerald-300 hover:text-emerald-200 disabled:opacity-60">⌖ {locating ? 'Finding location…' : 'Use my current location'}</button></div>}
+          {step === 0 && <div className="max-w-2xl"><p className="text-sm text-[#d9a14a]">Step 1 of 4</p><h1 className="mt-2 text-3xl sm:text-4xl font-semibold tracking-tight">Where do you want to hike?</h1><p className="mt-3 text-stone-400">Verified coverage currently includes Yosemite National Park. Current-location search works when you are inside that coverage area.</p><label className="block mt-9 text-sm font-semibold" htmlFor="location">Destination</label><div className="mt-2 flex rounded-xl border border-white/15 bg-black/20 p-2 focus-within:border-emerald-300"><span className="px-3 py-2 text-emerald-300">⌖</span><input id="location" autoFocus value={form.location} onChange={(e) => setOne('location', e.target.value)} onKeyDown={(e) => e.key === 'Enter' && canContinue && setStep(1)} placeholder={locating ? 'Finding your location…' : 'Try Yosemite National Park'} disabled={locating} className="w-full bg-transparent px-1 text-lg outline-none placeholder:text-stone-600 disabled:opacity-70" /></div><button type="button" onClick={useCurrentLocation} disabled={locating} className="mt-4 text-sm font-semibold text-emerald-300 hover:text-emerald-200 disabled:opacity-60">⌖ {locating ? 'Finding location…' : 'Use my current location'}</button><p className="mt-2 text-xs leading-relaxed text-stone-500">Choosing this asks your browser for location and remembers the in-app choice. GPS trail history is recorded only after you start a hike and stays on this device.</p></div>}
 
           {step === 1 && <div><p className="text-sm text-[#d9a14a]">Step 2 of 4</p><h1 className="mt-2 text-3xl sm:text-4xl font-semibold tracking-tight">Who’s coming along?</h1><p className="mt-3 text-stone-400">Choose all that apply. Group details are saved as planning context; Odyssey does not infer suitability from missing trail facts.</p><div className="mt-8 grid sm:grid-cols-2 md:grid-cols-3 gap-3">{groups.map((x) => <Choice key={x} active={form.group.includes(x)} onClick={() => toggle('group', x)}>{x}</Choice>)}</div><label className="block mt-8 text-sm text-stone-400">Group notes (optional)</label><input className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 outline-none focus:border-emerald-300" placeholder="e.g. One child and one older adult" /></div>}
 
