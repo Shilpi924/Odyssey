@@ -1,5 +1,5 @@
 import { defaultCache } from '@serwist/next/worker';
-import { Serwist } from '@serwist/core';
+import { Serwist } from 'serwist';
 import { BackgroundSyncPlugin } from '@serwist/background-sync';
 
 const bgSyncPlugin = new BackgroundSyncPlugin('hike-sync-queue', {

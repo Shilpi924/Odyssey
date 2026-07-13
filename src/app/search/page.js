@@ -1560,26 +1560,18 @@ function HikeSearchContent() {
 
   async function getLocationName(lat, lng) {
     try {
-      const r = await fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`
-      );
+      const r = await fetch(`/api/geocode?lat=${lat}&lng=${lng}`);
       const d = await r.json();
-      if (d.results?.[0]) {
-        const comp = d.results[0].address_components;
-        const city = comp.find((c) => c.types.includes('locality'))?.long_name;
-        const state = comp.find((c) => c.types.includes('administrative_area_level_1'))?.short_name;
-        if (city && state) return `${city}, ${state}`;
-      }
+      if (r.ok && d.label) return d.label;
     } catch {}
     return null;
   }
 
   async function getPlaceCoordinates(place) {
     try {
-      const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(place)}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`);
+      const response = await fetch(`/api/geocode?address=${encodeURIComponent(place)}`);
       const data = await response.json();
-      const location = data.results?.[0]?.geometry?.location;
-      if (location) return { lat: location.lat, lng: location.lng, name: data.results[0].formatted_address || place };
+      if (response.ok && data.location) return { lat: data.location.lat, lng: data.location.lng, name: data.label || place };
     } catch {}
     return null;
   }
@@ -2433,13 +2425,23 @@ function HikeSearchContent() {
                   <Source
                     id="terrainSource"
                     type="raster-dem"
-                    url="https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
+                    tiles={['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png']}
+                    tileSize={256}
+                    maxzoom={15}
+                    encoding="terrarium"
+                  />
+                  <Source
+                    id="hillshadeSource"
+                    type="raster-dem"
+                    tiles={['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png']}
+                    tileSize={256}
+                    maxzoom={15}
                     encoding="terrarium"
                   />
                   <Layer
                     id="hillshade-layer"
                     type="hillshade"
-                    source="terrainSource"
+                    source="hillshadeSource"
                     paint={{
                       'hillshade-shadow-color': '#475569',
                       'hillshade-highlight-color': '#f8fafc',

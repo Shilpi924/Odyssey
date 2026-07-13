@@ -39,9 +39,9 @@ export default function PlanPage() {
     navigator.geolocation.getCurrentPosition(async ({ coords }) => {
       let label = `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`;
       try {
-        const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${coords.latitude},${coords.longitude}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`);
+        const response = await fetch(`/api/geocode?lat=${coords.latitude}&lng=${coords.longitude}`);
         const data = await response.json();
-        label = data.results?.[0]?.formatted_address || label;
+        label = data.label || label;
       } catch {}
       setOne('location', label);
       setLocating(false);

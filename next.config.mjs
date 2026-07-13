@@ -7,8 +7,6 @@ const withSerwist = withSerwistInit({
 });
 
 /** @type {import('next').NextConfig} */
-const nextConfig = {
-  turbopack: {}, // Suppress turbopack warning
-};
+const nextConfig = {};
 
 export default withSerwist(nextConfig);

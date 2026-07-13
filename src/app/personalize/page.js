@@ -21,7 +21,7 @@ function PillButton({ label, selected, onClick, color = 'indigo' }) {
     cyan: selected ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/30 ring-2 ring-cyan-400' : 'bg-slate-700 text-slate-300 hover:bg-slate-600',
   };
   return (
-    <button onClick={onClick} className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${colors[color]}`}>
+    <button type="button" aria-pressed={selected} onClick={onClick} className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${colors[color]}`}>
       {label}
     </button>
   );
@@ -70,6 +70,7 @@ function SubGroup({ label, children }) {
 
 export default function Personalize() {
   const router = useRouter();
+  const [isReady, setIsReady] = useState(false);
   const [prefs, setPrefs] = useState({
     interests: ['Hiking'], // Default to hiking
     hiking: { difficulty: '', features: '', length: '', elevation: '' },
@@ -88,6 +89,8 @@ export default function Personalize() {
   });
 
   const { data: session, status } = useSession();
+
+  useEffect(() => setIsReady(true), []);
 
   useEffect(() => {
     const loadPrefs = async () => {
@@ -203,7 +206,7 @@ export default function Personalize() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 font-sans p-6 sm:p-8 flex flex-col items-center pb-24">
+    <div data-ready={isReady} className="min-h-screen bg-slate-900 font-sans p-6 sm:p-8 flex flex-col items-center pb-24">
       <div className="w-full max-w-3xl bg-slate-800/50 backdrop-blur-md rounded-3xl border border-slate-700 p-8 sm:p-12 mt-12 shadow-2xl">
         <div className="mb-10 text-center">
           <h1 className="text-3xl sm:text-4xl font-bold text-white mb-4">Personalize Your Experience</h1>

@@ -4,6 +4,7 @@ test.describe('Personalization Flow', () => {
   test('should allow user to select preferences and save to localStorage', async ({ page }) => {
     // Navigate to personalize page
     await page.goto('/personalize');
+    await expect(page.locator('[data-ready]')).toHaveAttribute('data-ready', 'true');
     
     // Verify header
     await expect(page.locator('h1')).toContainText('Personalize Your Experience');
@@ -25,10 +26,10 @@ test.describe('Personalization Flow', () => {
     page.on('dialog', dialog => dialog.accept());
     
     // Click Save
-    await page.click('button:has-text("Save Preferences")');
-    
-    // Verify navigation to home page
-    await expect(page).toHaveURL('/');
+    await Promise.all([
+      page.waitForURL('/'),
+      page.click('button:has-text("Save Preferences")'),
+    ]);
     
     // Verify localStorage data was set correctly
     localStorageData = await page.evaluate(() => localStorage.getItem('userPreferences'));
@@ -56,6 +57,7 @@ test.describe('Personalization Flow', () => {
     });
 
     await page.goto('/personalize');
+    await expect(page.locator('[data-ready]')).toHaveAttribute('data-ready', 'true');
     await expect(page.getByText('Choose your trail colors')).toBeVisible();
     await page.getByRole('button', { name: /Sunset/ }).click();
     await page.getByLabel('Higher contrast').check();
@@ -63,8 +65,10 @@ test.describe('Personalization Flow', () => {
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'sunset');
     await expect(page.locator('html')).toHaveAttribute('data-contrast', 'high');
 
-    await page.getByRole('button', { name: 'Save Preferences' }).click();
-    await expect(page).toHaveURL('/');
+    await Promise.all([
+      page.waitForURL('/'),
+      page.getByRole('button', { name: 'Save Preferences' }).click(),
+    ]);
     const preferences = await page.evaluate(() => JSON.parse(localStorage.getItem('userPreferences')));
     expect(preferences.theme).toBe('sunset');
     expect(preferences.highContrast).toBe(true);

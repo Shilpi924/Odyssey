@@ -67,9 +67,16 @@ npm install
 ### 2. Environment Variables
 Create a `.env.local` file in the root of the project:
 ```env
-ANTHROPIC_API_KEY=your_anthropic_api_key
 NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=your_google_maps_api_key
+GOOGLE_MAPS_SERVER_API_KEY=your_server_google_maps_api_key
+NPS_API_KEY=your_nps_api_key
+ANTHROPIC_API_KEY=your_anthropic_api_key
+DATABASE_URL=your_postgres_connection_string
+NEXTAUTH_URL=http://localhost:3007
+NEXTAUTH_SECRET=your_random_nextauth_secret
 ```
+
+Use separate Google keys. Restrict `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` by HTTP referrer because it is visible in the browser. Keep `GOOGLE_MAPS_SERVER_API_KEY`, `NPS_API_KEY`, and `ANTHROPIC_API_KEY` server-only. Copy `.env.example` for the complete variable list; never commit `.env` or `.env.local`.
 
 ### 3. Run the Development Server
 ```bash
