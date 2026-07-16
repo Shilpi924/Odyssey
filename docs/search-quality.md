@@ -53,6 +53,6 @@ Precision is judged against human-labeled relevant results. Famous-trail recall 
 - Seed benchmarks cover exact trail, park, region, filtered, and nearby searches.
 - Unit tests protect the schema and quality contract.
 
-## Yosemite pilot evaluation
+## California pilot evaluation
 
-`evaluateSearchBenchmarks()` executes the supported benchmark subset against the catalog engine. Unsupported regions are reported separately and never counted as successful. This prevents the Yosemite pilot from implying nationwide coverage.
+`evaluateSearchBenchmarks()` executes the supported Yosemite and Mount Diablo benchmark subsets against the catalog engine. Unsupported regions are reported separately and never counted as successful. This prevents the California pilot from implying nationwide official coverage; community-mapped results are evaluated separately from the reviewed catalog.

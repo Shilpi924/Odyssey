@@ -45,12 +45,13 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Location required' }, { status: 400 });
   }
 
-  const response = searchVerifiedTrails({
+  const response = await searchVerifiedTrails({
     lat: body.lat,
     lng: body.lng,
     query: body.naturalLanguageQuery,
     preferences: body.preferences,
     excludeNames: body.excludeNames,
+    radius: body.radius,
   });
-  return NextResponse.json({ ...response, _routedBy: 'verifiedCatalog' });
+  return NextResponse.json({ ...response, _routedBy: response.source === 'catalog' ? 'verifiedCatalog' : 'communitySearch' });
 }

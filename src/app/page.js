@@ -40,7 +40,7 @@ export default function Home() {
               The right trail for <span className="text-[#d9a14a] italic font-serif">everyone</span> in your group.
             </h1>
             <p className="mt-7 max-w-xl text-lg sm:text-xl leading-relaxed text-stone-300">
-              Sourced Yosemite trail recommendations with difficulty filters, official alerts, saved trail facts, and local GPS tracking.
+              Search easy-to-understand trail information for Yosemite, Mount Diablo, nearby areas, and other destinations—with source links, maps, saved trails, and local GPS tracking.
             </p>
             <div className="mt-9 flex flex-col sm:flex-row gap-3">
               <Link href="/plan" className="rounded-xl bg-[var(--app-accent)] px-6 py-4 text-center font-bold text-[#122019] hover:brightness-110 transition-all">Plan my hike <span className="ml-2">→</span></Link>

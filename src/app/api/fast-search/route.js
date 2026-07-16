@@ -15,10 +15,11 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  return NextResponse.json(searchVerifiedTrails({
+  return NextResponse.json(await searchVerifiedTrails({
     lat: body.lat,
     lng: body.lng,
     query: body.query,
     preferences: body.preferences,
+    radius: body.radius,
   }));
 }

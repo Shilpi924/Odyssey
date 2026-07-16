@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
 import { elevationStats, geometryDistanceMiles, relationToMultiLineString, stitchLineSegments } from '../src/lib/trails/geometry.js';
-import { fetchNpsAlerts, fetchNpsParkBoundary, fetchOsmRelationGeometry } from '../src/lib/trails/providers.js';
+import { fetchCaliforniaStateParksTrailGeometry, fetchNpsAlerts, fetchNpsParkBoundary, fetchOsmRelationGeometry } from '../src/lib/trails/providers.js';
 
 describe('route geometry', () => {
   it('stitches adjacent and reversed segments', () => {
@@ -30,6 +30,59 @@ describe('live-data providers', () => {
     expect((await fetchOsmRelationGeometry(123, fetchImpl)).coordinates).toHaveLength(1);
   });
 
+  it('parses official California State Parks GeoJSON geometry', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ features: [
+      {
+        properties: { OBJECTID: 3725, Unit_Nbr: 203, ROUTENAME: 'North Peak Trl' },
+        geometry: { type: 'LineString', coordinates: [[-121.91, 37.88], [-121.92, 37.89]] },
+      },
+      {
+        properties: { OBJECTID: 3726, Unit_Nbr: 203, ROUTENAME: 'North Peak Trl' },
+        geometry: { type: 'LineString', coordinates: [[-121.92, 37.89], [-121.93, 37.9]] },
+      },
+    ] }) });
+    const geometry = await fetchCaliforniaStateParksTrailGeometry({ featureIds: [3725, 3726], unitNumber: 203 }, fetchImpl);
+    expect(geometry).toEqual({
+      type: 'MultiLineString',
+      coordinates: [[[-121.91, 37.88], [-121.92, 37.89], [-121.93, 37.9]]],
+    });
+    const requestUrl = new URL(fetchImpl.mock.calls[0][0]);
+    expect(requestUrl.searchParams.get('objectIds')).toBe('3725,3726');
+    expect(requestUrl.searchParams.get('returnGeometry')).toBe('true');
+    expect(requestUrl.searchParams.get('outSR')).toBe('4326');
+    expect(requestUrl.searchParams.get('f')).toBe('geojson');
+  });
+
+  it('rejects partial or unexpected California State Parks feature coverage', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ features: [
+      {
+        properties: { OBJECTID: 3725, Unit_Nbr: 203, ROUTENAME: 'North Peak Trl' },
+        geometry: { type: 'LineString', coordinates: [[-121.91, 37.88], [-121.92, 37.89]] },
+      },
+      {
+        properties: { OBJECTID: 9999, Unit_Nbr: 203, ROUTENAME: 'Unexpected trail' },
+        geometry: { type: 'LineString', coordinates: [[-121.92, 37.89], [-121.93, 37.9]] },
+      },
+    ] }) });
+
+    await expect(fetchCaliforniaStateParksTrailGeometry(
+      { featureIds: [3725, 3726], unitNumber: 203 },
+      fetchImpl,
+    )).rejects.toThrow('geometry is incomplete or unavailable for the requested features');
+  });
+
+  it('rejects a requested feature returned from the wrong park unit', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ features: [{
+      properties: { OBJECTID: 3217, Unit_Nbr: 999, ROUTENAME: 'Wrong park trail' },
+      geometry: { type: 'LineString', coordinates: [[-121.91, 37.88], [-121.92, 37.89]] },
+    }] }) });
+
+    await expect(fetchCaliforniaStateParksTrailGeometry(
+      { featureIds: [3217], unitNumber: 203 },
+      fetchImpl,
+    )).rejects.toThrow('geometry is incomplete or unavailable for the requested features');
+  });
+
   it('normalizes NPS alerts without exposing the API key', async () => {
     const fetchImpl = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: [{ id: 'a', title: 'Closure', description: 'Closed', category: 'Park Closure', url: 'https://nps.gov', lastIndexedDate: '2026-01-01' }] }) });
     const result = await fetchNpsAlerts('yose', 'secret', fetchImpl);
@@ -43,6 +96,7 @@ describe('live-data providers', () => {
 
   it('rejects invalid provider identifiers before making a request', async () => {
     await expect(fetchOsmRelationGeometry('bad')).rejects.toThrow('Invalid OSM relation ID');
+    await expect(fetchCaliforniaStateParksTrailGeometry({ featureIds: ['bad'] })).rejects.toThrow('Invalid California State Parks feature IDs');
     await expect(fetchNpsAlerts('../bad', 'secret')).rejects.toThrow('Invalid NPS park code');
   });
 

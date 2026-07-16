@@ -3,25 +3,21 @@
 import { useState, useEffect, useRef, Suspense, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import Map, { AttributionControl, Marker, Source, Layer } from 'react-map-gl/maplibre';
+import Map, { AttributionControl, Marker, Popup, Source, Layer } from 'react-map-gl/maplibre';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { db } from '@/lib/db';
-import { MAP_CONFIG } from '@/lib/map-style';
-import { motion, AnimatePresence } from 'framer-motion';
+import { getMapStyleUrl } from '@/lib/map-style';
 import TrailCardSkeleton from '@/components/ui/TrailCardSkeleton';
 import QuickFilters from '@/components/ui/QuickFilters';
 import SearchHistory, { addToHistory } from '@/components/ui/SearchHistory';
 import LocationAccessCard from '@/components/privacy/LocationAccessCard';
+import TrailResultCard from '@/components/search/TrailResultCard';
 import useLocationAccess from '@/hooks/useLocationAccess';
+import useResolvedTheme from '@/hooks/useResolvedTheme';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
-const FEAT_ICONS = {
-  Shaded: '🌳', Sunny: '☀️', Water: '💧', Summit: '🏔️',
-  DogFriendly: '🐾', Loop: '🔄', Scenic: '📸', EasyParking: '🚗',
-  Wildflowers: '🌸', Alpine: '🧊',
-};
 
 const DIFF = {
   Easy:      { bg: 'bg-emerald-500', text: 'text-emerald-300', badge: 'bg-emerald-400/10 text-emerald-300 border border-emerald-400/30', pin: '#22c55e' },
@@ -39,21 +35,23 @@ function distanceMiles(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-const PIN_COLORS = [
-  { bg: 'bg-rose-500', cardBg: 'bg-rose-900/40', text: 'text-rose-300', badge: 'bg-rose-400/10 text-rose-300 border border-rose-400/30', border: 'border-rose-400', shadow: 'shadow-rose-900/30', ring: 'ring-rose-500/40' },
-  { bg: 'bg-orange-500', cardBg: 'bg-orange-900/40', text: 'text-orange-300', badge: 'bg-orange-400/10 text-orange-300 border border-orange-400/30', border: 'border-orange-400', shadow: 'shadow-orange-900/30', ring: 'ring-orange-500/40' },
-  { bg: 'bg-amber-500', cardBg: 'bg-amber-900/40', text: 'text-amber-300', badge: 'bg-amber-400/10 text-amber-300 border border-amber-400/30', border: 'border-amber-400', shadow: 'shadow-amber-900/30', ring: 'ring-amber-500/40' },
-  { bg: 'bg-emerald-500', cardBg: 'bg-emerald-900/40', text: 'text-emerald-300', badge: 'bg-emerald-400/10 text-emerald-300 border border-emerald-400/30', border: 'border-emerald-400', shadow: 'shadow-emerald-900/30', ring: 'ring-emerald-500/40' },
-  { bg: 'bg-cyan-500', cardBg: 'bg-cyan-900/40', text: 'text-cyan-300', badge: 'bg-cyan-400/10 text-cyan-300 border border-cyan-400/30', border: 'border-cyan-400', shadow: 'shadow-cyan-900/30', ring: 'ring-cyan-500/40' },
-  { bg: 'bg-blue-500', cardBg: 'bg-blue-900/40', text: 'text-blue-300', badge: 'bg-blue-400/10 text-blue-300 border border-blue-400/30', border: 'border-blue-400', shadow: 'shadow-blue-900/30', ring: 'ring-blue-500/40' },
-  { bg: 'bg-indigo-500', cardBg: 'bg-indigo-900/40', text: 'text-indigo-300', badge: 'bg-indigo-400/10 text-indigo-300 border border-indigo-400/30', border: 'border-indigo-400', shadow: 'shadow-indigo-900/30', ring: 'ring-indigo-500/40' },
-  { bg: 'bg-violet-500', cardBg: 'bg-violet-900/40', text: 'text-violet-300', badge: 'bg-violet-400/10 text-violet-300 border border-violet-400/30', border: 'border-violet-400', shadow: 'shadow-violet-900/30', ring: 'ring-violet-500/40' },
-  { bg: 'bg-fuchsia-500', cardBg: 'bg-fuchsia-900/40', text: 'text-fuchsia-300', badge: 'bg-fuchsia-400/10 text-fuchsia-300 border border-fuchsia-400/30', border: 'border-fuchsia-400', shadow: 'shadow-fuchsia-900/30', ring: 'ring-fuchsia-500/40' },
-  { bg: 'bg-pink-500', cardBg: 'bg-pink-900/40', text: 'text-pink-300', badge: 'bg-pink-400/10 text-pink-300 border border-pink-400/30', border: 'border-pink-400', shadow: 'shadow-pink-900/30', ring: 'ring-pink-500/40' },
-];
-const getPinColor = (index) => PIN_COLORS[index % PIN_COLORS.length];
+function extendGeometryBounds(bounds, geometry) {
+  if (!geometry?.coordinates) return bounds;
+  const pending = [geometry.coordinates];
+  while (pending.length > 0) {
+    const value = pending.pop();
+    if (!Array.isArray(value)) continue;
+    if (value.length >= 2 && Number.isFinite(value[0]) && Number.isFinite(value[1])) {
+      bounds.extend([value[0], value[1]]);
+      continue;
+    }
+    pending.push(...value);
+  }
+  return bounds;
+}
 
 const KNOWN_SEARCH_DESTINATIONS = [
+  { pattern: /\b(?:mount|mt\.?)?\s*diablo(?: state park)?\b/i, lat: 37.8721, lng: -121.9414, name: 'Mount Diablo State Park, CA' },
   { pattern: /\btuolumne meadows\b/i, lat: 37.8735, lng: -119.3507, name: 'Tuolumne Meadows, Yosemite National Park' },
   { pattern: /\bhetch hetchy\b/i, lat: 37.9463, lng: -119.7870, name: 'Hetch Hetchy, Yosemite National Park' },
   { pattern: /\bmariposa grove\b/i, lat: 37.5063, lng: -119.5988, name: 'Mariposa Grove, Yosemite National Park' },
@@ -66,233 +64,59 @@ function knownSearchDestination(query) {
   return KNOWN_SEARCH_DESTINATIONS.find(destination => destination.pattern.test(query || '')) || null;
 }
 
-function TrailCardHeader({ trail, index, color, difficulty }) {
-  return (
-    <div className="relative h-28 w-full overflow-hidden bg-gradient-to-br from-slate-700 via-slate-800 to-emerald-950">
-      <div className="absolute inset-0 opacity-30 bg-[radial-gradient(circle_at_70%_20%,#34d399,transparent_35%),linear-gradient(135deg,transparent_45%,#94a3b8_46%,transparent_48%)]" />
-      <div className={`absolute top-2 left-2 ${color.bg} text-white text-xs font-bold px-2 py-1 rounded-lg shadow`}>
-        {index + 1}
-      </div>
-      {trail.difficulty && (
-        <div className={`absolute top-2 right-2 text-xs font-bold px-2.5 py-1 rounded-lg shadow backdrop-blur-md ${difficulty.badge}`}>
-          {trail.difficulty}
-        </div>
-      )}
-      <p className="absolute bottom-3 left-4 text-xs font-medium text-slate-300">Verified catalog trail</p>
-    </div>
-  );
+function isNearbySearch(query) {
+  const normalized = String(query || '').trim().toLowerCase();
+  if (!normalized || /^(hikes?|trails?)$/.test(normalized)) return true;
+  return /\b(?:near\s+me|nearby|(?:my\s+)?current\s+location|around\s+me|close\s+to\s+me)\b/.test(normalized);
 }
 
-// ─── Trail Chat Drawer ─────────────────────────────────────────────────────────
-
-const QUICK_QUESTIONS = [
-  'What should I pack?',
-  'Is parking hard?',
-  'Crowded on weekends?',
-  'Safe for kids?',
-  'Hardest section?',
-  'Best viewpoint?',
-];
-
-function TrailChatDrawer({ trail, open, onClose, onTriggerSafetyMode }) {
-  const [history, setHistory] = useState([]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const bottomRef = useRef(null);
-  const inputRef = useRef(null);
-
-  const sendMessage = async (msg) => {
-    if (!msg.trim() || loading) return;
-
-    // Intercept Safety Keywords
-    const safetyKeywords = ['lost', 'injured', 'stranded', 'disoriented', 'unable to return', "i'm lost", "i am lost"];
-    if (safetyKeywords.some(keyword => msg.toLowerCase().includes(keyword))) {
-      onTriggerSafetyMode?.();
-      return;
-    }
-
-    const userMsg = { role: 'user', content: msg };
-    const next = [...history, userMsg];
-    setHistory(next);
-    setInput('');
-    setLoading(true);
-
-    try {
-      const res = await fetch('/api/trail-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trail, question: msg, history }),
-      });
-      const data = await res.json();
-      setHistory([...next, { role: 'assistant', content: data.answer || 'Sorry, no answer.' }]);
-    } catch {
-      setHistory([...next, { role: 'assistant', content: 'Something went wrong. Try again.' }]);
-    }
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    if (open && trail && history.length === 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setHistory([
-        {
-          role: 'assistant',
-          content: `Ask me about general preparation for ${trail.name}. I only know the sourced facts shown here, not current local conditions. 🥾`,
-        },
-      ]);
-    }
-    if (!open) {
-      setHistory([]);
-      setInput('');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, trail?.name]);
-
-  // ── Scroll to bottom of chat
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [history, loading]);
-
-  const handleChatVoiceSearch = () => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return alert('Voice search not supported in this browser.');
-    const recognition = new SpeechRecognition();
-    recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      setInput(transcript);
-    };
-    recognition.start();
-  };
-
-  useEffect(() => {
-    if (open) setTimeout(() => inputRef.current?.focus(), 400);
-  }, [open]);
-
-  if (!trail) return null;
-
-  return (
-    <>
-      {/* Backdrop */}
-      <div
-        className={`fixed inset-0 z-40 bg-black/60 transition-opacity duration-300 ${open ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-        onClick={onClose}
-      />
-      {/* Drawer */}
-      <div
-        className={`fixed inset-x-0 bottom-0 z-50 flex flex-col bg-slate-900 rounded-t-3xl border-t border-slate-700 shadow-2xl transition-transform duration-300 ease-out ${open ? 'translate-y-0' : 'translate-y-full'}`}
-        style={{ maxHeight: '75vh' }}
-      >
-        {/* Handle + header */}
-        <div className="shrink-0 flex flex-col items-center pt-3 pb-4 px-5 border-b border-slate-700/60">
-          <div className="w-10 h-1 bg-slate-600 rounded-full mb-4" />
-          <div className="flex items-center justify-between w-full">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">🥾</span>
-              <div>
-                <p className="text-white font-semibold text-sm">Ask about this trail</p>
-                <p className="text-slate-400 text-xs truncate max-w-[220px]">{trail.name}</p>
-              </div>
-            </div>
-            <button
-              onClick={onClose}
-              className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-
-        {/* Quick question chips — shown only at start */}
-        {history.length <= 1 && (
-          <div className="shrink-0 flex gap-2 px-4 py-3 overflow-x-auto border-b border-slate-800/60">
-            {QUICK_QUESTIONS.map((q) => (
-              <button
-                key={q}
-                onClick={() => sendMessage(q)}
-                className="shrink-0 text-xs px-3 py-1.5 rounded-full bg-indigo-900/50 border border-indigo-500/30 text-indigo-300 hover:bg-indigo-800/60 transition-colors whitespace-nowrap"
-              >
-                {q}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3">
-          {history.map((msg, i) => (
-            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div
-                className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
-                  msg.role === 'user'
-                    ? 'bg-indigo-600 text-white rounded-br-md'
-                    : 'bg-slate-800 text-slate-200 rounded-bl-md'
-                }`}
-              >
-                {msg.role === 'assistant' && <span className="mr-1.5">🤖</span>}
-                {msg.content}
-              </div>
-            </div>
-          ))}
-          {loading && (
-            <div className="flex justify-start">
-              <div className="bg-slate-800 px-4 py-3 rounded-2xl rounded-bl-md flex items-center gap-1.5">
-                {[0, 150, 300].map((d) => (
-                  <div key={d} className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: `${d}ms` }} />
-                ))}
-              </div>
-            </div>
-          )}
-          <div ref={bottomRef} />
-        </div>
-
-        {/* Input */}
-        <div className="shrink-0 flex items-center gap-2 p-4 border-t border-slate-700/60">
-          <div className="flex-1 relative">
-            <input
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && sendMessage(input)}
-              placeholder="Ask anything about this trail…"
-              className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2.5 pr-10 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
-            />
-            <button 
-              onClick={handleChatVoiceSearch} 
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-indigo-400 transition-colors"
-              title="Voice Search"
-            >
-              🎙️
-            </button>
-          </div>
-          <button
-            onClick={() => sendMessage(input)}
-            disabled={!input.trim() || loading}
-            className="w-10 h-10 flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white rounded-xl transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
-            </svg>
-          </button>
-        </div>
-      </div>
-    </>
-  );
+function trailMatchesQuickFilters(trail, activeFilters) {
+  return activeFilters.every(filter => {
+    if (filter === 'easy') return trail.difficulty === 'Easy';
+    if (filter === 'moderate') return trail.difficulty === 'Moderate';
+    if (filter === 'scenic') return trail.features?.includes('Scenic');
+    return true;
+  });
 }
 
-// ─── Map Pins ──────────────────────────────────────────────────────────────────
+function withPlanningPreferences(preferences, searchParams) {
+  const difficulty = searchParams.get('difficulty');
+  const distance = searchParams.get('distance');
+  const hiking = { ...(preferences?.hiking || {}) };
+  if (['Easy', 'Moderate', 'Hard', 'Strenuous'].includes(difficulty)) hiking.difficulty = [difficulty];
+  if (difficulty === 'Any') delete hiking.difficulty;
+  if (['Under 3 miles', '3–5 miles', '5–10 miles'].includes(distance)) hiking.length = distance;
+  if (distance === 'Any distance') delete hiking.length;
+  return { ...preferences, hiking };
+}
 
 function TrailPin({ trail, index, isSelected, onClick }) {
-  const d = getPinColor(index);
+  const markerRef = useRef(null);
+  useEffect(() => {
+    const element = markerRef.current?.getElement?.();
+    if (!element) return;
+    element.setAttribute('aria-label', `Show ${trail.name} on map`);
+    element.setAttribute('aria-pressed', String(isSelected));
+  }, [isSelected, trail.name]);
   return (
-    <Marker longitude={trail.lng} latitude={trail.lat} onClick={(e) => { e.originalEvent.stopPropagation(); onClick(); }} style={{ zIndex: isSelected ? 100 : 10 }}>
+    <Marker ref={markerRef} longitude={trail.lng} latitude={trail.lat} onClick={(event) => { event.originalEvent.stopPropagation(); onClick(); }} style={{ zIndex: isSelected ? 100 : 10 }}>
       <div
         className="flex flex-col items-center cursor-pointer"
         style={{ transform: isSelected ? 'scale(1.3)' : 'scale(1)', transition: 'transform 0.2s' }}
       >
-        <div className={`${d.bg} text-white text-xs font-bold w-8 h-8 rounded-full flex items-center justify-center shadow-lg border-2 border-white`}>
+        <div
+          className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-white text-xs font-bold shadow-lg"
+          style={{
+            backgroundColor: isSelected ? 'var(--app-accent)' : 'var(--app-primary-strong)',
+            color: isSelected ? 'var(--app-bg)' : '#ffffff',
+          }}
+        >
           {index + 1}
         </div>
-        <div className={`w-0.5 h-2 ${d.bg}`} />
+        <div
+          className="h-2 w-0.5"
+          style={{ backgroundColor: isSelected ? 'var(--app-accent)' : 'var(--app-primary-strong)' }}
+        />
       </div>
     </Marker>
   );
@@ -300,8 +124,16 @@ function TrailPin({ trail, index, isSelected, onClick }) {
 
 function UserPin({ position, heading }) {
   const rotation = heading !== null ? heading : 0;
+  const userMarkerRef = useRef(null);
+  useEffect(() => {
+    const element = userMarkerRef.current?.getElement?.();
+    if (!element) return;
+    element.setAttribute('role', 'img');
+    element.setAttribute('aria-label', 'Your current location');
+    element.tabIndex = -1;
+  }, []);
   return (
-    <Marker longitude={position.lng} latitude={position.lat} style={{ zIndex: 200 }}>
+    <Marker ref={userMarkerRef} longitude={position.lng} latitude={position.lat} style={{ zIndex: 200 }}>
       <div className="flex flex-col items-center gap-1">
         <div className="bg-blue-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-lg border border-blue-400 whitespace-nowrap">
           📍 You are here
@@ -329,27 +161,40 @@ function UserPin({ position, heading }) {
 }
 
 function MapPopup({ trail, index, onClose, onStartHike }) {
-  const d = getPinColor(index);
   const diffBadge = getDiff(trail.difficulty);
   return (
-    <Marker longitude={trail.lng} latitude={trail.lat} style={{ zIndex: 300 }}>
-      <div className="mb-14 w-64 bg-slate-900 border border-slate-600 rounded-2xl shadow-2xl p-4 relative overflow-hidden">
+    <Popup
+      longitude={trail.lng}
+      latitude={trail.lat}
+      anchor="bottom"
+      offset={28}
+      closeButton={false}
+      closeOnClick={false}
+      maxWidth="18rem"
+      onClose={onClose}
+    >
+      <div className="relative w-64 overflow-hidden rounded-2xl bg-[var(--app-surface)] p-4 text-[var(--app-text)]">
         <button
+          type="button"
+          aria-label="Close trail details"
           onClick={(e) => { e.stopPropagation(); onClose(); }}
-          className="absolute top-2 right-2 w-6 h-6 rounded-full bg-slate-700 text-slate-400 hover:text-white text-xs flex items-center justify-center"
+          className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-[var(--app-surface-raised)] text-xs text-[var(--app-muted)] hover:text-[var(--app-text)]"
         >
           ✕
         </button>
         <div className="flex items-start gap-2 mb-2">
-          <span className={`shrink-0 w-6 h-6 rounded-full ${d.bg} text-white text-xs font-bold flex items-center justify-center`}>{index + 1}</span>
-          <h4 className="text-white text-sm font-semibold leading-tight">{trail.name}</h4>
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--app-accent)] text-xs font-bold text-[var(--app-bg)]">{index + 1}</span>
+          <h4 className="text-sm font-semibold leading-tight text-[var(--app-text)]">{trail.name}</h4>
         </div>
         {(trail.length || trail.elevationGain || trail.difficulty) && (
-          <div className="flex gap-2 text-xs text-slate-400 mb-3">
+          <div className="mb-3 flex gap-2 text-xs text-[var(--app-muted)]">
             {trail.length && <span>🥾 {trail.length}</span>}
             {trail.elevationGain && <span>⬆️ {trail.elevationGain}</span>}
             {trail.difficulty && <span className={`font-semibold ${diffBadge.text}`}>{trail.difficulty}</span>}
           </div>
+        )}
+        {!trail.difficulty && (
+          <p className="mb-3 text-[11px] leading-relaxed text-amber-200">Difficulty is not listed. Verify the official source before starting.</p>
         )}
         <div className="flex gap-2">
           <button
@@ -357,334 +202,13 @@ function MapPopup({ trail, index, onClose, onStartHike }) {
               e.stopPropagation();
               onStartHike(trail);
             }}
-            className="flex-1 text-sm bg-slate-700 hover:bg-slate-600 text-white py-2.5 rounded-xl font-medium transition-colors"
+            className="flex-1 rounded-xl bg-[var(--app-primary)] py-2.5 text-sm font-bold text-[var(--app-bg)] transition-opacity hover:opacity-90"
           >
             🚶 Start Hike
           </button>
         </div>
       </div>
-    </Marker>
-  );
-}
-
-// ─── Elevation Sparkline ────────────────────────────────────────────────────────
-
-function Sparkline({ data }) {
-  if (!data || data.length < 2) return null;
-  const max = Math.max(...data);
-  const min = Math.min(...data);
-  const range = max - min || 1;
-  const width = 100;
-  const height = 24;
-  
-  const points = data.map((val, i) => {
-    const x = (i / (data.length - 1)) * width;
-    const y = height - ((val - min) / range) * height;
-    return `${x},${y}`;
-  }).join(' ');
-
-  return (
-    <div className="flex items-end gap-2 text-xs text-slate-400">
-      <svg width={width} height={height} className="overflow-visible">
-        <polyline points={points} fill="none" stroke="#6366f1" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        <polygon points={`0,${height} ${points} ${width},${height}`} fill="url(#sparkGradient)" opacity="0.2" />
-        <defs>
-          <linearGradient id="sparkGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#6366f1" />
-            <stop offset="100%" stopColor="#6366f1" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-      </svg>
-      <span className="mb-0.5">{max}ft</span>
-    </div>
-  );
-}
-
-// ─── Skeleton Trail Card ───────────────────────────────────────────────────────
-
-function SkeletonTrailCard() {
-  return (
-    <div className="bg-slate-800/70 border border-slate-700/50 rounded-2xl overflow-hidden shadow-md animate-pulse">
-      <div className="h-36 w-full bg-slate-700/50"></div>
-      <div className="p-5 flex flex-col gap-3">
-        <div className="h-5 w-3/4 bg-slate-700 rounded"></div>
-        <div className="h-4 w-1/2 bg-slate-700 rounded"></div>
-        <div className="flex gap-2 mt-2">
-          <div className="h-8 w-20 bg-slate-700 rounded-xl"></div>
-          <div className="h-8 w-20 bg-slate-700 rounded-xl"></div>
-          <div className="h-8 w-20 bg-slate-700 rounded-xl"></div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── AI Trail Card ─────────────────────────────────────────────────────────────
-
-function AITrailCard({ trail, index, isSelected, onSelect, cardRef, onAskAI, onSave, isSaved, onCompareToggle, isComparing, onStartHike, searchMode }) {
-  const d = getPinColor(index);
-  const diffBadge = getDiff(trail.difficulty);
-
-  const handleDragEnd = (event, info) => {
-    if (info.offset.x > 100) {
-      onSave(trail);
-    }
-  };
-
-  return (
-    <motion.div
-      ref={cardRef}
-      drag="x"
-      dragConstraints={{ left: 0, right: 0 }}
-      dragElastic={0.2}
-      onDragEnd={handleDragEnd}
-      onClick={onSelect}
-      className={`bg-slate-800/80 backdrop-blur-md border rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 relative shadow-lg ${
-        isSelected ? `${d.border} shadow-2xl ${d.shadow} ring-2 ${d.ring} -translate-y-1` : 'border-slate-700/70 hover:border-slate-500 hover:shadow-xl hover:-translate-y-0.5'
-      } ${isComparing ? 'ring-2 ring-emerald-500' : ''}`}
-    >
-      {/* Swipe Indicator (Background) */}
-      <div className="absolute inset-y-0 left-0 w-full bg-emerald-500/20 flex items-center pl-8 -z-10">
-        <span className="text-emerald-400 font-bold text-lg">💾 Release to Save</span>
-      </div>
-
-      <div className={`${d.cardBg} w-full h-full relative`}>
-      <TrailCardHeader trail={trail} index={index} color={d} difficulty={diffBadge} />
-
-      <div className="p-5 flex flex-col gap-3">
-        {/* Header row */}
-        <div className="flex flex-col gap-1.5">
-          <h3 className="text-white font-bold text-[17px] leading-tight tracking-tight">{trail.name}</h3>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-300 font-medium">
-            <span className="flex items-center gap-1 text-slate-400">
-              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"></path></svg>
-              {trail.distance}
-            </span>
-            {trail.rating && (
-              <span className="flex items-center gap-1 bg-amber-500/10 text-amber-300 px-2 py-0.5 rounded-md border border-amber-500/20">
-                <svg className="w-3 h-3 text-amber-400" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
-                {trail.rating}
-                {trail.userRatingsTotal > 0 && <span className="text-amber-400/70 ml-0.5">({trail.userRatingsTotal.toLocaleString()})</span>}
-              </span>
-            )}
-          </div>
-        </div>
-
-        <AnimatePresence>
-          {isSelected && (
-            <motion.div
-              initial={{ height: 0, opacity: 0, marginTop: 0 }}
-              animate={{ height: 'auto', opacity: 1, marginTop: 12 }}
-              exit={{ height: 0, opacity: 0, marginTop: 0 }}
-              className="flex flex-col gap-3 overflow-hidden"
-            >
-        {/* Stats */}
-        <div className="flex gap-4 text-sm text-slate-300 items-end">
-          {trail.length && <span>🥾 {trail.length}</span>}
-          {trail.elevationGain && <span>⬆️ {trail.elevationGain}</span>}
-          {trail.sparkline && <Sparkline data={trail.sparkline} />}
-        </div>
-
-        {/* Feature tags */}
-        {trail.features?.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {trail.features.map((f) => (
-              <span key={f} className="text-xs px-2.5 py-1 rounded-full bg-slate-700/80 text-slate-300 border border-slate-600/50">
-                {FEAT_ICONS[f]} {f}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Why it matches — the AI's personalised reasoning */}
-        {trail.why && (
-          <p className="text-sm text-indigo-200/80 border-l-2 border-indigo-500/60 pl-3 leading-relaxed">
-            {trail.why}
-          </p>
-        )}
-
-        {/* Best time + parking */}
-        {(trail.bestTime || trail.parkingNote) && (
-          <div className="flex flex-col gap-1">
-            {trail.bestTime && <p className="text-xs text-slate-400">⏰ {trail.bestTime}</p>}
-            {trail.parkingNote && <p className="text-xs text-slate-400">🚗 {trail.parkingNote}</p>}
-          </div>
-        )}
-
-        {/* Weather note */}
-        {trail.weatherNote && (
-          <div className="bg-blue-900/20 border border-blue-500/20 rounded-xl px-3 py-2">
-            <p className="text-xs text-blue-300">🌤️ {trail.weatherNote}</p>
-          </div>
-        )}
-
-        {/* Local tip */}
-        {trail.tip && (
-          <div className="flex items-start gap-2 bg-amber-900/20 border border-amber-500/20 rounded-xl px-3 py-2.5">
-            <span>💡</span>
-            <p className="text-xs text-amber-200/80 leading-relaxed">{trail.tip}</p>
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex gap-2 pt-1">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onSave(trail);
-            }}
-            className={`flex-1 text-xs py-2.5 rounded-xl transition-colors font-medium ${isSaved ? 'bg-emerald-900/50 text-emerald-300 border border-emerald-500/30' : 'bg-slate-700 hover:bg-slate-600 text-white'}`}
-          >
-            {isSaved ? '✓ Saved' : '💾 Save Trail'}
-          </button>
-          {trail.difficulty ? (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onStartHike(trail);
-              }}
-              className="flex-1 text-xs py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl transition-colors font-medium"
-            >
-              🚶 Start Hike
-            </button>
-          ) : (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                window.open(`https://www.google.com/maps/dir/?api=1&destination=${trail.lat},${trail.lng}`, '_blank');
-              }}
-              className="flex-1 text-xs py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl transition-colors font-medium"
-            >
-              🗺️ Navigate
-            </button>
-          )}
-          <button
-            onClick={(e) => { e.stopPropagation(); onAskAI(trail); }}
-            className="flex-1 text-xs py-2.5 bg-indigo-900/50 hover:bg-indigo-800/60 border border-indigo-500/30 text-indigo-300 rounded-xl transition-colors font-medium"
-          >
-            💬 Trail Guide
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); onCompareToggle(trail); }}
-            className={`flex-[0.5] text-xs py-2.5 rounded-xl transition-colors font-medium border ${isComparing ? 'bg-emerald-900/50 border-emerald-500 text-emerald-300' : 'bg-slate-800 border-slate-600 text-slate-400 hover:bg-slate-700'}`}
-          >
-            ⚖️
-          </button>
-        </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-      </div>
-    </motion.div>
-  );
-}
-
-// ─── Verified catalog trail card ──────────────────────────────────────────────
-
-function FastTrailCard({ trail, index, isSelected, onSelect, cardRef, onSave, isSaved, onStartHike }) {
-  const d = getPinColor(index);
-  const diffBadge = getDiff(trail.difficulty);
-
-  return (
-    <div
-      ref={cardRef}
-      onClick={onSelect}
-      className={`${d.cardBg} backdrop-blur-md border rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 shadow-lg relative ${
-        isSelected ? `${d.border} shadow-2xl ${d.shadow} ring-2 ${d.ring} -translate-y-1` : 'border-slate-700/70 hover:border-slate-500 hover:shadow-xl hover:-translate-y-0.5'
-      }`}
-    >
-      <TrailCardHeader trail={trail} index={index} color={d} difficulty={diffBadge} />
-
-      <div className="p-5 flex flex-col gap-2">
-        <div className="flex flex-col gap-1.5">
-          <h3 className="text-white font-bold text-[17px] leading-tight tracking-tight">{trail.name}</h3>
-          <p className="text-slate-400 text-xs truncate">{trail.vicinity}</p>
-          
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-300 font-medium mt-0.5">
-            <span className="flex items-center gap-1 text-slate-400">
-              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"></path></svg>
-              {trail.distance}
-            </span>
-            {trail.rating && (
-              <span className="flex items-center gap-1 bg-amber-500/10 text-amber-300 px-2 py-0.5 rounded-md border border-amber-500/20">
-                <svg className="w-3 h-3 text-amber-400" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
-                {trail.rating}
-                {trail.userRatingsTotal > 0 && <span className="text-amber-400/70 ml-0.5">({trail.userRatingsTotal.toLocaleString()})</span>}
-              </span>
-            )}
-          </div>
-          {trail.sourceAttribution && (
-            <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
-              <span>{trail.sourceAttribution}</span>
-              {trail.geometrySource && <span className="text-emerald-400">Route geometry: OpenStreetMap</span>}
-              {trail.access?.permitRequired && <span className="text-amber-300">Permit required</span>}
-              {trail.access?.status && <span>Access: {trail.access.status}</span>}
-            </div>
-          )}
-        </div>
-        <AnimatePresence>
-          {isSelected && (
-            <motion.div
-              initial={{ height: 0, opacity: 0, marginTop: 0 }}
-              animate={{ height: 'auto', opacity: 1, marginTop: 8 }}
-              exit={{ height: 0, opacity: 0, marginTop: 0 }}
-              className="flex flex-col gap-2 overflow-hidden"
-            >
-        <div className="flex gap-2 pt-2">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onSave(trail);
-            }}
-            className={`flex-1 text-xs py-2.5 rounded-xl transition-colors font-medium ${isSaved ? 'bg-emerald-900/50 text-emerald-300 border border-emerald-500/30' : 'bg-slate-700 hover:bg-slate-600 text-white'}`}
-          >
-            {isSaved ? '✓ Saved' : '💾 Save Trail'}
-          </button>
-          {trail.difficulty ? (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onStartHike(trail);
-              }}
-              className="flex-1 text-xs py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl transition-colors font-medium"
-            >
-              🚶 Start Hike
-            </button>
-          ) : (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                window.open(`https://www.google.com/maps/dir/?api=1&destination=${trail.lat},${trail.lng}`, '_blank');
-              }}
-              className="flex-1 text-xs py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-xl transition-colors font-medium"
-            >
-              🗺️ Navigate
-            </button>
-          )}
-        </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    </div>
-  );
-}
-
-// ─── Conversation bubble ───────────────────────────────────────────────────────
-
-function ConvBubble({ msg }) {
-  return (
-    <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} px-4`}>
-      <div
-        className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
-          msg.role === 'user' ? 'bg-indigo-600 text-white rounded-br-sm' : 'bg-slate-700/80 text-slate-200 rounded-bl-sm'
-        }`}
-      >
-        {msg.role === 'assistant' && <span className="mr-1.5">🤖</span>}
-        {msg.display}
-      </div>
-    </div>
+    </Popup>
   );
 }
 
@@ -872,15 +396,16 @@ function SafetyPanel({ userLocation, onClose, isOffline }) {
 function HikeSearchContent() {
   const searchParams = useSearchParams();
   const query = searchParams.get('q');
-  const mobileView = searchParams.get('view') || 'results';
+  const mobileView = searchParams.get('view') === 'map' ? 'map' : 'results';
   const { locationAllowed, locationReady, allowLocation, forgetLocation } = useLocationAccess();
+  const resolvedTheme = useResolvedTheme();
 
   // ── Search state
   const [status, setStatus] = useState('idle');
   const [trails, setTrails] = useState([]);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const [source, setSource] = useState(null); // 'ai' | 'fast'
+  const [source, setSource] = useState(null); // 'catalog' | 'openstreetmap'
   const [locationName, setLocationName] = useState('');
   const [userLocation, setUserLocation] = useState(null);
   const [error, setError] = useState('');
@@ -893,7 +418,7 @@ function HikeSearchContent() {
 
   // ── Search input state
   const [searchQuery, setSearchQuery] = useState(query && query !== 'hikes' ? query : '');
-  const searchMode = 'fast';
+  const [showSearchEditor, setShowSearchEditor] = useState(false);
   const groupMode = false;
   const groupDescription = '';
   const searchRadius = 25;
@@ -908,48 +433,15 @@ function HikeSearchContent() {
   const [preloadedKey, setPreloadedKey] = useState(null);
 
   // ── Map state
+  const [expandedIdx, setExpandedIdx] = useState(null);
   const [selectedIdx, setSelectedIdx] = useState(null);
   const [mapCenter, setMapCenter] = useState(null);
-  const [mapType, setMapType] = useState('roadmap');
   const [mapZoom, setMapZoom] = useState(12);
-  const [showTraffic, setShowTraffic] = useState(false);
+  const [mapToolsOpen, setMapToolsOpen] = useState(false);
   const [mapError, setMapError] = useState(false);
   const [mapRevision, setMapRevision] = useState(0);
-
-  // ── Refinement state
-  const [conversation, setConversation] = useState([]);
-  const [refineInput, setRefineInput] = useState('');
-  const [isRefining, setIsRefining] = useState(false);
-
-  // ── Trail chat state
-  const [chatTrail, setChatTrail] = useState(null);
-  const [chatOpen, setChatOpen] = useState(false);
-
-
-  // ── Compare state
-  const [compareList, setCompareList] = useState([]);
-  const [showCompare, setShowCompare] = useState(false);
-
-  // ── Voice Search Logic
-  const handleVoiceSearch = () => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return alert('Voice search not supported in this browser.');
-    const recognition = new SpeechRecognition();
-    recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      setRefineInput(transcript);
-    };
-    recognition.start();
-  };
-
-  // ── Compare Logic
-  const toggleCompare = (trail) => {
-    setCompareList(prev => {
-      if (prev.find(t => t.name === trail.name)) return prev.filter(t => t.name !== trail.name);
-      if (prev.length >= 3) { alert('You can only compare up to 3 trails.'); return prev; }
-      return [...prev, trail];
-    });
-  };
+  const [routeGeometries, setRouteGeometries] = useState({});
+  const [routeGeometryStatus, setRouteGeometryStatus] = useState({});
 
   // ── Offline & Saved state
   const [isOffline, setIsOffline] = useState(false);
@@ -976,6 +468,8 @@ function HikeSearchContent() {
 
   const cardRefs = useRef([]);
   const mapRef = useRef(null);
+  const mapErrorReportedRef = useRef(false);
+  const selectedTrailIdRef = useRef(null);
 
   // ── Hike Tracking state
   const [isHiking, setIsHiking] = useState(false);
@@ -1264,7 +758,6 @@ function HikeSearchContent() {
             naturalLanguageQuery: '',
             preferences,
             groupDescription: groupMode ? groupDescription : null,
-            forceMode: searchMode || null,
             radius: searchRadius,
             priceRange: priceRange || null,
           }),
@@ -1282,10 +775,10 @@ function HikeSearchContent() {
     };
 
     preload();
-  }, [userLocation, preferences, searchRadius, priceRange, groupMode, groupDescription, isOffline, status, searchQuery, preloadedKey, isPreloading, searchMode]);
+  }, [userLocation, preferences, searchRadius, priceRange, groupMode, groupDescription, isOffline, status, searchQuery, preloadedKey, isPreloading]);
 
-  const fitAllTrails = useCallback(() => {
-    if (!mapRef.current || trails.length === 0) {
+  const fitTrailCollection = useCallback((trailCollection) => {
+    if (!mapRef.current || trailCollection.length === 0) {
       if (userLocation) {
         setMapCenter({ ...userLocation });
         setMapZoom(11);
@@ -1295,28 +788,25 @@ function HikeSearchContent() {
     }
     
     const bounds = new maplibregl.LngLatBounds();
-    trails.forEach(t => {
+    trailCollection.forEach(t => {
       if (t.lat && t.lng) bounds.extend([t.lng, t.lat]);
     });
-    if (userLocation) bounds.extend([userLocation.lng, userLocation.lat]);
-    
-    mapRef.current.fitBounds(bounds, { padding: 50, duration: 1000, maxZoom: 14 });
-    setSelectedIdx(null);
-  }, [userLocation, trails]);
-
-  // Auto-fit to top 3 trails when trails load
-  useEffect(() => {
-    if (trails.length > 0 && mapRef.current && status === 'done') {
-      const top = trails.slice(0, 3).filter(t => t.lat && t.lng);
-      if (top.length === 0) return;
-      
-      const bounds = new maplibregl.LngLatBounds();
-      top.forEach(t => bounds.extend([t.lng, t.lat]));
-      if (userLocation) bounds.extend([userLocation.lng, userLocation.lat]);
-      
-      mapRef.current.fitBounds(bounds, { padding: 50, duration: 1000, maxZoom: 14 });
+    if (userLocation && (isNearbySearch(searchQuery) || isHiking)) {
+      bounds.extend([userLocation.lng, userLocation.lat]);
     }
-  }, [trails, status, userLocation]);
+    
+    if (!bounds.isEmpty()) {
+      mapRef.current.fitBounds(bounds, {
+        padding: { top: 72, right: 52, bottom: 72, left: 52 },
+        duration: 700,
+        maxZoom: 13.5,
+      });
+    }
+  }, [isHiking, searchQuery, userLocation]);
+
+  const fitAllTrails = useCallback(() => {
+    fitTrailCollection(trails.filter(trail => trailMatchesQuickFilters(trail, activeFilters)));
+  }, [activeFilters, fitTrailCollection, trails]);
 
   function getLocation() {
     return new Promise((res, rej) =>
@@ -1333,12 +823,13 @@ function HikeSearchContent() {
   }
 
   const runSearch = useCallback(
-    async (forceMode = null, locationAuthorized = false, destinationOverride = null) => {
+    async (locationAuthorized = false, destinationOverride = null) => {
       setStatus('locating');
       setTrails([]);
       setHasMore(true);
-      setConversation([]);
       setError('');
+      selectedTrailIdRef.current = null;
+      setExpandedIdx(null);
       setSelectedIdx(null);
       setWeather(null);
       setParkAlerts([]);
@@ -1346,8 +837,9 @@ function HikeSearchContent() {
       setCoverageMessage('');
 
       const requestedQuery = destinationOverride ?? searchQuery;
+      const requestPreferences = withPlanningPreferences(preferences, searchParams);
       const knownDestination = knownSearchDestination(requestedQuery);
-      const needsDeviceLocation = !requestedQuery.trim() || /\b(?:near me|nearby)\b/i.test(requestedQuery);
+      const needsDeviceLocation = isNearbySearch(requestedQuery);
       if (needsDeviceLocation && !locationAllowed && !locationAuthorized) {
         setStatus('location');
         return;
@@ -1373,7 +865,7 @@ function HikeSearchContent() {
           const [pLat, pLng, pPrefs, pRadius, pPrice, pGroup] = keyParts;
           const latDiff = Math.abs(lat - parseFloat(pLat));
           const lngDiff = Math.abs(lng - parseFloat(pLng));
-          const currentPrefs = JSON.stringify(preferences);
+          const currentPrefs = JSON.stringify(requestPreferences);
           
           if (
             latDiff < 0.002 && 
@@ -1409,33 +901,17 @@ function HikeSearchContent() {
           addToHistory(requestedQuery);
         }
 
-        // Use fast-search for default, smart-search for AI mode
-        const apiUrl = searchMode === 'ai' ? '/api/smart-search' : '/api/fast-search';
-        const body = searchMode === 'ai' 
-          ? {
-              lat,
-              lng,
-              locationName: locName,
-              naturalLanguageQuery: requestedQuery,
-              preferences,
-              groupDescription: groupMode ? groupDescription : null,
-              forceMode: 'ai',
-              radius: searchRadius,
-              priceRange: priceRange || null,
-            }
-          : {
-              lat,
-              lng,
-              query: requestedQuery,
-              preferences,
-              radius: searchRadius,
-              priceRange: priceRange || null,
-            };
-
-        const res = await fetch(apiUrl, {
+        const res = await fetch('/api/fast-search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
+          body: JSON.stringify({
+            lat,
+            lng,
+            query: requestedQuery,
+            preferences: requestPreferences,
+            radius: searchRadius,
+            priceRange: priceRange || null,
+          }),
         });
         
         if (!res.ok) {
@@ -1472,27 +948,14 @@ function HikeSearchContent() {
         setStatus('error');
       }
     },
-    [searchQuery, searchMode, preferences, groupMode, groupDescription, searchRadius, preloadedData, preloadedKey, priceRange, searchParams, locationAllowed, forgetLocation]
+    [searchQuery, preferences, groupMode, groupDescription, searchRadius, preloadedData, preloadedKey, priceRange, searchParams, locationAllowed, forgetLocation]
   );
 
   // Filtering is derived data; memoization avoids a second render and stale results.
-  const filteredTrails = useMemo(() => trails.filter(trail => {
-    if (activeFilters.length === 0) return true;
-      for (const filter of activeFilters) {
-        switch (filter) {
-          case 'easy':
-            if (trail.difficulty !== 'Easy') return false;
-            break;
-          case 'moderate':
-            if (trail.difficulty !== 'Moderate') return false;
-            break;
-          case 'scenic':
-            if (!trail.features?.includes('Scenic')) return false;
-            break;
-        }
-      }
-      return true;
-    }), [activeFilters, trails]);
+  const filteredTrails = useMemo(
+    () => trails.filter(trail => trailMatchesQuickFilters(trail, activeFilters)),
+    [activeFilters, trails]
+  );
 
   // Session Storage Caching
   useEffect(() => {
@@ -1507,11 +970,10 @@ function HikeSearchContent() {
         weather,
         locationName,
         userLocation,
-        searchMode,
         coverageMessage
       }));
     }
-  }, [status, trails, searchQuery, source, hasMore, weather, locationName, userLocation, searchMode, searchParams, coverageMessage]);
+  }, [status, trails, searchQuery, source, hasMore, weather, locationName, userLocation, searchParams, coverageMessage]);
 
   // Auto-trigger when navigated from home
   useEffect(() => {
@@ -1542,14 +1004,68 @@ function HikeSearchContent() {
     if ((query || searchParams.get('nearme') === 'true') && status === 'idle') runSearch();
   }, [query, preferencesReady, locationReady]); // eslint-disable-line
 
-  const selectTrail = (idx) => {
-    const next = idx === selectedIdx ? null : idx;
-    setSelectedIdx(next);
-    if (next !== null && trails[next]?.lat) {
-      setMapCenter({ lat: trails[next].lat, lng: trails[next].lng });
-      setMapZoom(14);
-      mapRef.current?.flyTo({ center: [trails[next].lng, trails[next].lat], zoom: 14 });
+  const fitTrailOnMap = useCallback((trail, geometry) => {
+    if (!mapRef.current || !trail?.lat || !trail?.lng) return;
+    const bounds = extendGeometryBounds(new maplibregl.LngLatBounds(), geometry);
+    if (!bounds.isEmpty()) {
+      mapRef.current.fitBounds(bounds, {
+        padding: { top: 96, right: 72, bottom: 96, left: 72 },
+        duration: 650,
+        maxZoom: 14,
+      });
+      return;
     }
+    mapRef.current.flyTo({ center: [trail.lng, trail.lat], zoom: 13, duration: 650 });
+  }, []);
+
+  const focusTrailOnMap = (idx) => {
+    const trail = trails[idx];
+    if (!trail?.lat || !trail?.lng) return;
+    selectedTrailIdRef.current = trail.placeId || null;
+    setSelectedIdx(idx);
+    setMapCenter({ lat: trail.lat, lng: trail.lng });
+    setMapZoom(13);
+
+    const cachedGeometry = routeGeometries[trail.placeId];
+    fitTrailOnMap(trail, cachedGeometry);
+
+    if (!trail.geometryUrl || cachedGeometry || routeGeometryStatus[trail.placeId] === 'loading') return;
+    setRouteGeometryStatus(previous => ({ ...previous, [trail.placeId]: 'loading' }));
+    fetch(trail.geometryUrl)
+      .then(response => response.ok ? response.json() : Promise.reject(new Error('Route geometry unavailable')))
+      .then(data => {
+        if (!data.geometry) throw new Error('Route geometry unavailable');
+        setRouteGeometries(previous => ({ ...previous, [trail.placeId]: data.geometry }));
+        setRouteGeometryStatus(previous => ({ ...previous, [trail.placeId]: 'loaded' }));
+        if (selectedTrailIdRef.current === trail.placeId) fitTrailOnMap(trail, data.geometry);
+      })
+      .catch(() => setRouteGeometryStatus(previous => ({ ...previous, [trail.placeId]: 'error' })));
+  };
+
+  const showAllTrails = useCallback(() => {
+    selectedTrailIdRef.current = null;
+    setSelectedIdx(null);
+    window.requestAnimationFrame(fitAllTrails);
+  }, [fitAllTrails]);
+
+  const toggleTrailDetails = (idx) => {
+    setExpandedIdx(current => current === idx ? null : idx);
+  };
+
+  const updateQuickFilters = (nextFilters) => {
+    selectedTrailIdRef.current = null;
+    setSelectedIdx(null);
+    setActiveFilters(nextFilters);
+    window.requestAnimationFrame(() => {
+      fitTrailCollection(trails.filter(trail => trailMatchesQuickFilters(trail, nextFilters)));
+    });
+  };
+
+  const viewTrailOnMap = (idx) => {
+    focusTrailOnMap(idx);
+    window.requestAnimationFrame(() => {
+      document.getElementById('trail-map')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   };
 
   const calculateDistanceMiles = (lat1, lon1, lat2, lon2) => {
@@ -1900,62 +1416,13 @@ function HikeSearchContent() {
     }
   };
 
-  const scrollToCard = (idx) => {
-    setSelectedIdx(idx);
-    cardRefs.current[idx]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  };
-
-  const handleRefine = async () => {
-    if (!refineInput.trim() || isRefining) return;
-
-    // Intercept Safety Mode Triggers
-    const safetyKeywords = ['lost', 'injured', 'stranded', 'disoriented', 'unable to return', "i'm lost", "i am lost"];
-    if (safetyKeywords.some(keyword => refineInput.toLowerCase().includes(keyword))) {
-      setIsSafetyMode(true);
-      setRefineInput('');
-      return;
-    }
-
-    const userMsg = { role: 'user', content: refineInput, display: refineInput };
-    const nextConv = [...conversation, userMsg];
-    setConversation(nextConv);
-    const pendingInput = refineInput;
-    setRefineInput('');
-    setIsRefining(true);
-
-    try {
-      const res = await fetch('/api/refine-hikes', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          trails,
-          userMessage: pendingInput,
-          history: conversation.map((m) => ({ role: m.role, content: m.content })),
-          preferences,
-          locationName,
-        }),
-      });
-      const data = await res.json();
-      const claudeMsg = { role: 'assistant', content: data.message, display: data.message };
-
-      if (data.action === 'new_search') {
-        setConversation([...nextConv, claudeMsg]);
-        // Re-trigger AI search
-        setSearchQuery(pendingInput);
-        runSearch('ai');
-      } else {
-        if (data.trails?.length) setTrails(data.trails);
-        setConversation([...nextConv, claudeMsg]);
-      }
-    } catch {
-      setConversation([...nextConv, { role: 'assistant', content: 'Sorry, something went wrong.', display: 'Sorry, something went wrong.' }]);
-    }
-    setIsRefining(false);
-  };
-
   const hasTrails = status === 'done' && trails.length > 0;
-  const hikingPrefs = preferences?.hiking || {};
-  const hasPrefs = Object.values(hikingPrefs).some((v) => (Array.isArray(v) ? v.length > 0 : !!v));
+  const selectedTrail = selectedIdx === null ? null : trails[selectedIdx];
+  const selectedRouteGeometry = selectedTrail ? routeGeometries[selectedTrail.placeId] : null;
+  const mapLocationLabel = locationName || searchQuery || 'this area';
+  const mapSummary = selectedTrail
+    ? `Showing ${selectedTrail.name}`
+    : `${filteredTrails.length} ${filteredTrails.length === 1 ? 'trail' : 'trails'} near ${mapLocationLabel}`;
 
   useEffect(() => {
     if (mobileView === 'results') return;
@@ -1964,7 +1431,7 @@ function HikeSearchContent() {
   }, [mobileView, hasTrails]);
 
   return (
-    <div className="flex flex-col min-h-screen md:h-screen bg-slate-900 font-sans overflow-visible md:overflow-hidden pb-24 md:pb-0">
+    <div className="flex min-h-screen min-h-[100dvh] flex-col bg-[var(--app-bg)] pb-[var(--mobile-nav-clearance)] font-sans md:h-[100dvh] md:overflow-hidden md:pb-0">
 
       {pendingHike && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="hike-location-title">
@@ -2058,117 +1525,358 @@ function HikeSearchContent() {
         </div>
       )}
 
-      {/* ── Trail Chat drawer ── */}
-      <TrailChatDrawer 
-        trail={chatTrail} 
-        open={chatOpen} 
-        onClose={() => setChatOpen(false)} 
-        onTriggerSafetyMode={() => {
-          setChatOpen(false);
-          setIsSafetyMode(true);
-        }}
-      />
-
-      {/* ── Compare Drawer ── */}
-      <AnimatePresence>
-        {showCompare && compareList.length > 0 && (
-          <motion.div
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            exit={{ y: '100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed bottom-0 left-0 w-full sm:w-[400px] bg-slate-900 border-t border-r border-slate-700 shadow-2xl z-50 rounded-tr-3xl overflow-hidden"
-          >
-            <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/90 backdrop-blur">
-              <h3 className="text-white font-bold text-lg flex items-center gap-2">⚖️ Compare Trails</h3>
-              <button onClick={() => setShowCompare(false)} className="text-slate-400 hover:text-white bg-slate-800 p-1.5 rounded-full">✕</button>
-            </div>
-            <div className="p-4 overflow-x-auto">
-              <div className="flex gap-4 min-w-max">
-                {compareList.map(t => (
-                  <div key={t.name} className="w-48 shrink-0 bg-slate-800 border border-slate-700 rounded-xl p-3 flex flex-col gap-2">
-                    <h4 className="text-white font-bold text-sm truncate">{t.name}</h4>
-                    <span className={`text-[10px] w-fit px-2 py-0.5 rounded-full ${getDiff(t.difficulty).badge}`}>{t.difficulty}</span>
-                    <div className="text-xs text-slate-400 space-y-1 mt-1">
-                      <p>📍 {t.distance}</p>
-                      <p>🥾 {t.length}</p>
-                      <p>⬆️ {t.elevationGain}</p>
-                    </div>
-                    {t.sparkline && <div className="mt-2"><Sparkline data={t.sparkline} /></div>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* ── Offline Banner ── */}
       {isOffline && (
         <div className="shrink-0 bg-rose-600 text-white text-xs font-semibold px-4 py-2 text-center flex items-center justify-center gap-2 z-50">
-          <span>⚠️</span> You are offline. Showing cached results. Live chat disabled.
+          <span aria-hidden="true">⚠️</span> You are offline. Showing cached results.
         </div>
       )}
 
       {/* ── Header ── */}
-      <header className="shrink-0 border-b border-slate-800 px-4 py-3 flex items-center gap-3 z-20 bg-slate-900">
-        <Link href="/" className="text-slate-400 hover:text-white transition-colors">
+      <header className="z-20 flex shrink-0 items-center gap-3 border-b border-[var(--app-border)] bg-[var(--app-bg)] px-4 py-3">
+        <Link href="/" aria-label="Back to Discover" className="rounded-lg p-1 text-[var(--app-muted)] transition-colors hover:bg-[var(--app-surface)] hover:text-[var(--app-text)]">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </Link>
         <div className="flex-1 min-w-0">
-          <h1 className="text-white font-bold text-base">
-            {searchQuery ? `🔍 ${searchQuery}` : '🥾 Hikes Near Me'}
+          <h1 className="truncate text-base font-bold text-[var(--app-text)]" title={searchQuery || 'Find a hike'}>
+            {searchQuery || 'Find a hike'}
           </h1>
-          {locationName && <p className="text-slate-400 text-xs truncate">{locationName}</p>}
+          {locationName && <p className="truncate text-xs text-[var(--app-muted)]">{locationName}</p>}
         </div>
-        <button 
+        <button
+          type="button"
+          aria-label="Open emergency help"
           onClick={() => setIsSafetyMode(true)}
-          className="shrink-0 text-xs text-rose-400 bg-rose-950/40 border border-rose-500/30 px-3 py-1.5 rounded-full transition-colors hover:bg-rose-950/60 font-bold"
+          className="min-h-10 shrink-0 rounded-full border border-rose-500/40 bg-rose-950/40 px-3 text-xs font-bold text-rose-300 transition-colors hover:bg-rose-950/70"
         >
-          🆘 SOS / Lost?
+          SOS
         </button>
-        <Link href="/saved" className="shrink-0 text-xs text-emerald-400 bg-emerald-900/30 border border-emerald-500/30 px-3 py-1.5 rounded-full transition-colors hover:bg-emerald-900/50">
-          💾 Saved
-        </Link>
-        {hasTrails && (
-          <button
-            onClick={() => runSearch()}
-            disabled={isOffline}
-            className="shrink-0 text-slate-400 hover:text-white border border-slate-700 px-2.5 py-1.5 rounded-full text-xs transition-all disabled:opacity-50"
-          >
-            🔄
-          </button>
-        )}
       </header>
 
       <div className="flex-1 flex flex-col md:flex-row min-h-0 relative w-full">
+        {/* ── Scrollable results / idle ── */}
+        <div id="trail-results" tabIndex={-1} className="relative z-20 order-first flex min-h-0 flex-none flex-col overflow-visible bg-[var(--app-bg)] md:w-1/2 md:flex-1 md:overflow-y-auto">
+        {isSafetyMode ? (
+          <SafetyPanel
+            userLocation={userLocation}
+            isOffline={isOffline}
+            onClose={() => setIsSafetyMode(false)}
+          />
+        ) : (
+          <>
+
+        {/* Loading states */}
+        {status === 'location' && (
+          <div className="mx-auto w-full max-w-xl p-6 pt-12">
+            <LocationAccessCard
+              title="Use your location for nearby trails?"
+              description="Odyssey sends your current coordinates to its search service for this nearby search. GPS trail history is recorded only after you start a hike and remains on this device."
+              onAllow={() => {
+                allowLocation();
+                runSearch(true);
+              }}
+              alternativeLabel="Search Yosemite instead"
+              onAlternative={() => {
+                const destination = 'Yosemite National Park';
+                setSearchQuery(destination);
+                runSearch(false, destination);
+              }}
+            />
+          </div>
+        )}
+
+        {status === 'locating' && (
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <div className="w-10 h-10 rounded-full border-4 border-indigo-500 border-t-transparent animate-spin" />
+            <p className="text-slate-300 font-medium">Getting your location…</p>
+          </div>
+        )}
+
+        {status === 'searching' && (
+          <div className="flex flex-col gap-4 p-4 mt-2">
+            <TrailCardSkeleton />
+            <TrailCardSkeleton />
+            <TrailCardSkeleton />
+          </div>
+        )}
+
+        {status === 'error' && (
+          <div className="m-6 bg-rose-900/30 border border-rose-500/30 rounded-2xl p-6 text-center">
+            <p className="text-rose-300 font-semibold mb-2">Something went wrong</p>
+            <p className="text-rose-400/80 text-sm mb-5">{error}</p>
+            <button onClick={() => runSearch()} className="px-6 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-medium transition-colors">Try Again</button>
+          </div>
+        )}
+
+        {/* Results */}
+        {hasTrails && (
+          <>
+
+
+            <section className="px-4 pt-4" aria-labelledby="search-results-heading">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--app-border)] pb-4">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 id="search-results-heading" className="text-lg font-bold text-[var(--app-text)]">
+                      {activeFilters.length > 0
+                        ? `${filteredTrails.length} of ${trails.length} trails`
+                        : `${trails.length} ${trails.length === 1 ? 'trail' : 'trails'}`}
+                    </h2>
+                    <span className="rounded-full border border-[var(--app-border)] bg-[var(--app-surface)] px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-[var(--app-muted)]">
+                      {source === 'openstreetmap' ? 'Community mapped' : 'Official sources'}
+                    </span>
+                  </div>
+                  {locationName && <p className="mt-1 truncate text-xs text-[var(--app-muted)]">Near {locationName}</p>}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    aria-expanded={showSearchEditor}
+                    aria-controls="edit-search-panel"
+                    onClick={() => setShowSearchEditor(open => !open)}
+                    className="min-h-10 rounded-xl px-3 text-sm font-semibold text-[var(--app-primary)] hover:bg-[var(--app-surface)]"
+                  >
+                    Edit search
+                  </button>
+                  <QuickFilters activeFilters={activeFilters} onFilter={updateQuickFilters} />
+                </div>
+              </div>
+
+              {showSearchEditor && (
+                <form
+                  id="edit-search-panel"
+                  className="mt-3 flex gap-2 rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] p-2"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    setShowSearchEditor(false);
+                    runSearch(false, searchQuery);
+                  }}
+                >
+                  <label htmlFor="edit-trail-search" className="sr-only">Search for trails</label>
+                  <input
+                    id="edit-trail-search"
+                    value={searchQuery}
+                    onChange={event => setSearchQuery(event.target.value)}
+                    placeholder="Trail, park, city, or hikes near me"
+                    className="min-w-0 flex-1 bg-transparent px-2 text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--app-muted)]"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isOffline || !searchQuery.trim()}
+                    className="min-h-10 rounded-xl bg-[var(--app-primary)] px-4 text-sm font-bold text-white disabled:opacity-50"
+                  >
+                    Search
+                  </button>
+                </form>
+              )}
+
+              {source === 'openstreetmap' && (
+                <p className="mt-3 text-xs leading-relaxed text-[var(--app-muted)]">
+                  Community-mapped results. Confirm access and conditions with the local land manager.
+                </p>
+              )}
+            </section>
+
+            {parkAlerts.length > 0 && (
+              <details className="mx-4 mt-4 rounded-xl border border-amber-500/30 bg-amber-950/20 px-4 py-3">
+                <summary className="cursor-pointer text-sm font-semibold text-amber-200">
+                  {parkAlerts.length} current park {parkAlerts.length === 1 ? 'alert' : 'alerts'}
+                  {alertsFetchedAt && <span className="ml-2 text-[10px] font-normal text-amber-200/50">Updated {new Date(alertsFetchedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>}
+                </summary>
+                <div className="mt-3 flex flex-col gap-2">
+                  {parkAlerts.slice(0, 3).map(alert => (
+                    <a key={alert.id} href={alert.url} target="_blank" rel="noreferrer" className="text-xs text-amber-100/80 hover:text-amber-100">
+                      <span className="font-semibold">{alert.category}:</span> {alert.title}
+                    </a>
+                  ))}
+                </div>
+              </details>
+            )}
+
+            {/* Trail cards */}
+            <div className="px-4 py-4 flex flex-col gap-4">
+              {filteredTrails.length === 0 && activeFilters.length > 0 ? (
+                <div className="text-center py-8 text-slate-400">
+                  <p className="text-sm">No trails match your filters</p>
+                  <button
+                    onClick={() => updateQuickFilters([])}
+                    className="mt-2 text-xs text-indigo-400 hover:text-indigo-300"
+                  >
+                    Clear filters
+                  </button>
+                </div>
+              ) : (
+                filteredTrails.map(trail => {
+                  const trailIndex = trails.indexOf(trail);
+                  const cardKey = trail.placeId || `${trail.name}-${trail.lat}`;
+                  return (
+                    <TrailResultCard
+                      key={cardKey}
+                      trail={trail}
+                      index={trailIndex}
+                      isSelected={expandedIdx === trailIndex}
+                      onSelect={() => toggleTrailDetails(trailIndex)}
+                      cardRef={(el) => (cardRefs.current[trailIndex] = el)}
+                      onSave={() => handleSaveHike(trail)}
+                      isSaved={savedIds.has(`${trail.name}-${trail.lat}`)}
+                      onStartHike={() => startHike(trail)}
+                      onViewMap={() => viewTrailOnMap(trailIndex)}
+                      routeStatus={routeGeometryStatus[trail.placeId]}
+                    />
+                  );
+                })
+              )}
+
+              {hasMore && (
+                <button
+                  type="button"
+                  onClick={loadMore}
+                  disabled={isLoadingMore}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800 py-3 font-medium text-white transition-colors hover:bg-slate-700 disabled:opacity-50"
+                >
+                  {isLoadingMore ? (
+                    <>
+                      <div className="w-4 h-4 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    'Load More Trails ↓'
+                  )}
+                </button>
+              )}
+            </div>
+          </>
+        )}
+
+        {status === 'done' && !hasTrails && (
+          <div className="m-6 rounded-2xl border border-amber-500/30 bg-amber-950/30 p-6 text-center">
+            <p className="text-lg font-semibold text-amber-100">No trails found</p>
+            <p className="mt-2 text-sm leading-relaxed text-amber-100/70">{coverageMessage || 'Try a nearby park or city, or increase the search radius.'}</p>
+            <div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
+              <button type="button" onClick={() => setStatus('idle')} className="rounded-xl bg-amber-200 px-5 py-2.5 text-sm font-bold text-amber-950">Edit search</button>
+              <button type="button" onClick={() => { const nearbyQuery = 'hikes near me'; setSearchQuery(nearbyQuery); runSearch(false, nearbyQuery); }} className="rounded-xl border border-amber-200/30 px-5 py-2.5 text-sm font-bold text-amber-100">Use my location</button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Idle / search input state ── */}
+        {status === 'idle' && (
+          <div className="mx-auto flex w-full max-w-xl flex-col gap-5 p-6 pt-10">
+            <div>
+              <p className="text-sm font-semibold text-[var(--app-primary)]">Discover trails</p>
+              <h2 className="mt-1 text-2xl font-bold text-[var(--app-text)]">Where do you want to hike?</h2>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--app-muted)]">Search any trail, park, city, or ask for hikes near you.</p>
+            </div>
+
+            <form
+              className="rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] p-2 shadow-lg"
+              onSubmit={event => {
+                event.preventDefault();
+                runSearch(false, searchQuery);
+              }}
+            >
+              <label htmlFor="trail-search" className="sr-only">Search trails</label>
+              <input
+                id="trail-search"
+                type="search"
+                value={searchQuery}
+                onChange={event => setSearchQuery(event.target.value)}
+                placeholder="Try “Diablo hike” or “easy trails in Oakland”"
+                className="min-h-12 w-full bg-transparent px-3 text-base text-[var(--app-text)] outline-none placeholder:text-[var(--app-muted)]"
+              />
+              <button
+                type="submit"
+                disabled={isOffline || !searchQuery.trim()}
+                className="min-h-12 w-full rounded-xl bg-[var(--app-primary)] px-4 text-base font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                Search trails
+              </button>
+            </form>
+
+            <button
+              type="button"
+              onClick={() => {
+                const nearbyQuery = 'hikes near me';
+                setSearchQuery(nearbyQuery);
+                runSearch(false, nearbyQuery);
+              }}
+              disabled={isOffline}
+              className="min-h-12 w-full rounded-xl border border-[var(--app-border)] bg-[var(--app-surface)] px-4 text-sm font-bold text-[var(--app-text)] hover:border-[var(--app-primary)] disabled:opacity-50"
+            >
+              <span aria-hidden="true">⌖</span> Find hikes near me
+            </button>
+
+            <details className="rounded-xl border border-[var(--app-border)] px-4 py-3">
+              <summary className="cursor-pointer text-sm font-semibold text-[var(--app-muted)]">Search ideas &amp; recent searches</summary>
+              <div className="mt-3 flex flex-wrap gap-2" aria-label="Search examples">
+                {['Mount Diablo', 'trails near Oakland', 'easy waterfall hike'].map(example => (
+                  <button
+                    key={example}
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery(example);
+                      runSearch(false, example);
+                    }}
+                    className="rounded-full border border-[var(--app-border)] bg-[var(--app-surface)] px-3 py-2 text-xs font-semibold text-[var(--app-muted)] hover:text-[var(--app-text)]"
+                  >
+                    {example}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-3">
+                <SearchHistory
+                  onSelect={historyQuery => {
+                    setSearchQuery(historyQuery);
+                    runSearch(false, historyQuery);
+                  }}
+                />
+              </div>
+            </details>
+          </div>
+        )}
+        </>
+        )}
+      </div>
+
       {/* ── Map strip ── */}
       {(hasTrails || isHiking || mobileView !== 'results') && (
-        <div id="trail-map" className={`shrink-0 ${mobileView === 'results' ? 'h-[55vh]' : 'h-[calc(100vh-9rem)]'} md:h-full md:w-1/2 relative z-10 border-t md:border-t-0 md:border-l border-slate-700 order-last flex flex-col`}>
+        <div id="trail-map" role="region" aria-label="Trail map" className="search-trail-map relative z-10 order-last flex h-[calc(100dvh-var(--mobile-nav-clearance))] min-h-[32rem] shrink-0 flex-col border-t border-slate-700 md:h-full md:min-h-0 md:w-1/2 md:border-l md:border-t-0">
             <Map
               key={`trail-map-${mapRevision}`}
               ref={mapRef}
               initialViewState={{
-                longitude: mapCenter?.lng || -122.4194,
-                latitude: mapCenter?.lat || 37.7749,
+                longitude: mapCenter?.lng || trails[0]?.lng || -122.4194,
+                latitude: mapCenter?.lat || trails[0]?.lat || 37.7749,
                 zoom: mapZoom,
                 pitch: 0,
                 bearing: 0
               }}
-              mapStyle={MAP_CONFIG.styleUrl}
+              mapStyle={getMapStyleUrl(resolvedTheme)}
               attributionControl={false}
               style={{ width: '100%', height: '100%' }}
               minZoom={4}
               onZoom={(e) => setMapZoom(e.viewState.zoom)}
-              onLoad={() => setMapError(false)}
+              onLoad={() => {
+                mapErrorReportedRef.current = false;
+                setMapError(false);
+                if (trails.length > 0) {
+                  window.requestAnimationFrame(() => {
+                    if (selectedTrail) fitTrailOnMap(selectedTrail, selectedRouteGeometry);
+                    else fitAllTrails();
+                  });
+                }
+              }}
               onError={(e) => {
-                console.error('Map provider error:', e.error || e);
+                if (mapErrorReportedRef.current) return;
+                mapErrorReportedRef.current = true;
+                console.warn('Map provider is temporarily unavailable:', e.error || e);
                 setMapError(true);
               }}
             >
-              <AttributionControl compact={false} position="bottom-right" />
+              <AttributionControl compact position="bottom-right" />
               {userLocation && <UserPin position={userLocation} heading={deviceHeading} />}
 
               {/* Live Tracked Path */}
@@ -2189,62 +1897,80 @@ function HikeSearchContent() {
                 </Source>
               )}
 
-              {trails.map((trail, i) =>
-                trail.lat && trail.lng ? (
-                  <TrailPin key={`pin-${i}`} trail={trail} index={i} isSelected={selectedIdx === i} onClick={() => selectTrail(i)} />
-                ) : null
+              {filteredTrails.map(trail => {
+                const trailIndex = trails.indexOf(trail);
+                return trail.lat && trail.lng ? (
+                  <TrailPin
+                    key={`pin-${trail.placeId || trailIndex}`}
+                    trail={trail}
+                    index={trailIndex}
+                    isSelected={selectedIdx === trailIndex}
+                    onClick={() => focusTrailOnMap(trailIndex)}
+                  />
+                ) : null;
+              })}
+
+              {selectedTrail && selectedRouteGeometry && (
+                <Source id="selected-route-source" type="geojson" data={selectedRouteGeometry}>
+                  <Layer
+                    id="selected-route-layer"
+                    type="line"
+                    layout={{ 'line-join': 'round', 'line-cap': 'round' }}
+                    paint={{
+                      'line-color': resolvedTheme === 'daylight' ? '#0f766e' : '#67e8f9',
+                      'line-width': 5,
+                      'line-opacity': 0.96,
+                    }}
+                  />
+                </Source>
               )}
 
-              {trails.map((trail, i) =>
-                trail.route ? (
-                  <Source key={`source-${i}`} id={`route-source-${i}`} type="geojson" data={trail.route}>
-                    <Layer
-                      id={`route-layer-${i}`}
-                      type="line"
-                      layout={{
-                        'line-join': 'round',
-                        'line-cap': 'round'
-                      }}
-                      paint={{
-                        'line-color': selectedIdx === i ? '#3b82f6' : '#94a3b8',
-                        'line-width': selectedIdx === i ? 4 : 2,
-                        'line-dasharray': selectedIdx === i ? [1] : [2, 2]
-                      }}
-                    />
-                  </Source>
-                ) : null
-              )}
-
-              {selectedIdx !== null && trails[selectedIdx]?.lat && (
+              {selectedTrail?.lat && (
                 <MapPopup
-                  trail={trails[selectedIdx]}
+                  trail={selectedTrail}
                   index={selectedIdx}
-                  onClose={() => setSelectedIdx(null)}
+                  onClose={showAllTrails}
                   onStartHike={startHike}
                 />
               )}
 
-              {/* Right-side controls */}
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col gap-1.5 z-10">
-                  <button onClick={() => mapRef.current?.zoomTo(mapZoom + 1)} className="w-10 h-10 bg-slate-900/90 backdrop-blur border border-slate-600 rounded-xl text-white text-xl font-bold flex items-center justify-center shadow-lg hover:bg-slate-700 transition-colors">+</button>
-                  <button onClick={() => mapRef.current?.zoomTo(mapZoom - 1)} className="w-10 h-10 bg-slate-900/90 backdrop-blur border border-slate-600 rounded-xl text-white text-xl font-bold flex items-center justify-center shadow-lg hover:bg-slate-700 transition-colors">−</button>
-                  <button 
-                    onClick={() => setMapRotationMode(prev => prev === 'north' ? 'compass' : 'north')}
-                    title={mapRotationMode === 'north' ? "Switch to Compass Up" : "Switch to North Up"}
-                    className={`w-10 h-10 backdrop-blur border rounded-xl text-base flex items-center justify-center shadow-lg transition-colors ${
-                      mapRotationMode === 'compass' 
-                        ? 'bg-indigo-600/90 border-indigo-400 text-white font-bold animate-pulse' 
-                        : 'bg-slate-900/90 border-slate-600 text-slate-300 hover:bg-slate-700'
-                    }`}
-                  >
-                    🧭
-                  </button>
-                  {userLocation && (
-                    <button onClick={() => { setMapCenter({ ...userLocation }); mapRef.current?.flyTo({ center: [userLocation.lng, userLocation.lat], zoom: 13 }); }} title="My location" className="w-10 h-10 bg-slate-900/90 backdrop-blur border border-slate-600 rounded-xl text-white text-base flex items-center justify-center shadow-lg hover:bg-slate-700 transition-colors">📍</button>
-                  )}
-                  {hasTrails && (
-                    <button onClick={fitAllTrails} title="Show all trails" className="w-10 h-10 bg-slate-900/90 backdrop-blur border border-slate-600 rounded-xl text-white text-base flex items-center justify-center shadow-lg hover:bg-slate-700 transition-colors">🔭</button>
-                  )}
+              <div className="pointer-events-none absolute left-3 top-3 z-20 max-w-[calc(100%-9rem)] rounded-xl border border-[var(--app-border)] bg-[var(--app-surface)]/95 px-3 py-2 shadow-lg backdrop-blur" aria-live="polite">
+                <p className="truncate text-xs font-bold text-[var(--app-text)]">{mapSummary}</p>
+                {selectedTrail && routeGeometryStatus[selectedTrail.placeId] === 'loading' && (
+                  <p className="mt-0.5 text-[10px] text-[var(--app-muted)]">Loading official route…</p>
+                )}
+                {selectedTrail && routeGeometryStatus[selectedTrail.placeId] === 'error' && (
+                  <p className="mt-0.5 text-[10px] text-amber-300">Route line unavailable</p>
+                )}
+              </div>
+
+              <div className="absolute right-3 top-3 z-20">
+                <button
+                  type="button"
+                  aria-expanded={mapToolsOpen || isHiking}
+                  aria-controls="map-tools-panel"
+                  onClick={() => setMapToolsOpen(open => !open)}
+                  className="min-h-10 rounded-xl border border-[var(--app-border)] bg-[var(--app-surface)]/95 px-3 text-sm font-bold text-[var(--app-text)] shadow-lg backdrop-blur hover:bg-[var(--app-surface-raised)]"
+                >
+                  Map tools
+                </button>
+                {(mapToolsOpen || isHiking) && (
+                  <div id="map-tools-panel" role="group" aria-label="Map tools" className="mt-2 flex w-44 flex-col gap-1 rounded-xl border border-[var(--app-border)] bg-[var(--app-surface)]/95 p-2 shadow-xl backdrop-blur">
+                    {userLocation && (
+                      <button type="button" onClick={() => { selectedTrailIdRef.current = null; setSelectedIdx(null); setMapCenter({ ...userLocation }); mapRef.current?.flyTo({ center: [userLocation.lng, userLocation.lat], zoom: 13 }); }} className="min-h-10 rounded-lg px-3 text-left text-sm font-semibold text-[var(--app-text)] hover:bg-[var(--app-surface-raised)]">
+                        <span aria-hidden="true">📍</span> My location
+                      </button>
+                    )}
+                    {hasTrails && (
+                      <button type="button" onClick={showAllTrails} className="min-h-10 rounded-lg px-3 text-left text-sm font-semibold text-[var(--app-text)] hover:bg-[var(--app-surface-raised)]">
+                        <span aria-hidden="true">🔭</span> Show all trails
+                      </button>
+                    )}
+                    <button type="button" onClick={() => setMapRotationMode(mode => mode === 'north' ? 'compass' : 'north')} className="min-h-10 rounded-lg px-3 text-left text-sm font-semibold text-[var(--app-text)] hover:bg-[var(--app-surface-raised)]">
+                      <span aria-hidden="true">🧭</span> {mapRotationMode === 'north' ? 'Compass up' : 'North up'}
+                    </button>
+                  </div>
+                )}
               </div>
             </Map>
 
@@ -2252,7 +1978,7 @@ function HikeSearchContent() {
             <div role="status" className="absolute inset-x-4 top-4 z-40 rounded-xl border border-amber-400/40 bg-slate-950/95 p-4 text-sm text-amber-100 shadow-xl">
               <p className="font-semibold">Basemap temporarily unavailable</p>
               <p className="mt-1 text-xs text-slate-300">Verified trail facts remain available. Do not rely on this map for navigation.</p>
-              <button type="button" onClick={() => { setMapError(false); setMapRevision(revision => revision + 1); }} className="mt-3 rounded-lg border border-amber-300/40 px-3 py-1.5 text-xs font-semibold hover:bg-amber-300/10">Retry map</button>
+              <button type="button" onClick={() => { mapErrorReportedRef.current = false; setMapError(false); setMapRevision(revision => revision + 1); }} className="mt-3 rounded-lg border border-amber-300/40 px-3 py-1.5 text-xs font-semibold hover:bg-amber-300/10">Retry map</button>
             </div>
           )}
 
@@ -2332,335 +2058,9 @@ function HikeSearchContent() {
             </div>
           )}
 
-          {/* Count pill */}
-          {hasTrails && (
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur text-white text-xs font-semibold px-4 py-2 rounded-full border border-slate-600 shadow-lg pointer-events-none">
-              {trails.length} trails {mapType === 'satellite' ? '· 3D' : mapType === 'terrain' ? '· Terrain' : ''} · Tap a pin
-            </div>
-          )}
         </div>
       )}
 
-      {/* ── Scrollable results / idle ── */}
-      <div className="flex-none md:flex-1 md:w-1/2 overflow-visible md:overflow-y-auto bg-slate-900 relative z-20 flex flex-col min-h-0 p-4 pb-28 md:pb-4 order-first">
-        {isSafetyMode ? (
-          <SafetyPanel 
-            userLocation={userLocation} 
-            isOffline={isOffline} 
-            onClose={() => setIsSafetyMode(false)} 
-          />
-        ) : (
-          <>
-
-        {/* Loading states */}
-        {status === 'location' && (
-          <div className="mx-auto w-full max-w-xl p-6 pt-12">
-            <LocationAccessCard
-              title="Use your location for nearby trails?"
-              description="Odyssey sends your current coordinates to its search service for this nearby search. GPS trail history is recorded only after you start a hike and remains on this device."
-              onAllow={() => {
-                allowLocation();
-                runSearch(null, true);
-              }}
-              alternativeLabel="Search Yosemite instead"
-              onAlternative={() => {
-                const destination = 'Yosemite National Park';
-                setSearchQuery(destination);
-                runSearch(null, false, destination);
-              }}
-            />
-          </div>
-        )}
-
-        {status === 'locating' && (
-          <div className="flex flex-col items-center justify-center py-20 gap-4">
-            <div className="w-10 h-10 rounded-full border-4 border-indigo-500 border-t-transparent animate-spin" />
-            <p className="text-slate-300 font-medium">Getting your location…</p>
-          </div>
-        )}
-
-        {status === 'searching' && (
-          <div className="flex flex-col gap-4 p-4 mt-2">
-            <TrailCardSkeleton />
-            <TrailCardSkeleton />
-            <TrailCardSkeleton />
-          </div>
-        )}
-
-        {status === 'error' && (
-          <div className="m-6 bg-rose-900/30 border border-rose-500/30 rounded-2xl p-6 text-center">
-            <p className="text-rose-300 font-semibold mb-2">Something went wrong</p>
-            <p className="text-rose-400/80 text-sm mb-5">{error}</p>
-            <button onClick={() => runSearch()} className="px-6 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-medium transition-colors">Try Again</button>
-          </div>
-        )}
-
-        {/* Results */}
-        {hasTrails && (
-          <>
-
-
-            {/* Result context */}
-            <div className="flex justify-between px-4 pt-4">
-              <div className="flex flex-col gap-2 w-full">
-                {source === 'ai' && (
-                  <div className="truncate text-xs text-slate-400">
-                    Depending on your personalized profile, we have selected these {searchQuery.toLowerCase().includes('food') ? 'food options' : 'trails'} to best match your preferences.
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Quick Filters */}
-            {parkAlerts.length > 0 && (
-              <div className="mx-4 mt-4 rounded-2xl border border-amber-500/30 bg-amber-950/30 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-amber-200">Current National Park Service alerts</p>
-                  {alertsFetchedAt && <span className="text-[10px] text-amber-200/50">Updated {new Date(alertsFetchedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>}
-                </div>
-                <div className="mt-2 flex flex-col gap-2">
-                  {parkAlerts.slice(0, 3).map(alert => (
-                    <a key={alert.id} href={alert.url} target="_blank" rel="noreferrer" className="text-xs text-amber-100/80 hover:text-amber-100">
-                      <span className="font-semibold">{alert.category}:</span> {alert.title}
-                    </a>
-                  ))}
-                </div>
-              </div>
-            )}
-            <QuickFilters
-              activeFilters={activeFilters}
-              onFilter={setActiveFilters}
-            />
-
-            {/* Active preference chips (AI mode only) */}
-            {hasPrefs && source === 'ai' && (
-              <div className="flex gap-2 overflow-x-auto px-4 pt-3 pb-1 scrollbar-none">
-                {hikingPrefs.difficulty?.map((d) => (
-                  <span key={d} className={`shrink-0 text-xs px-3 py-1 rounded-full border ${getDiff(d).badge}`}>{d}</span>
-                ))}
-                {hikingPrefs.features?.map((f) => (
-                  <span key={f} className="shrink-0 text-xs px-3 py-1 rounded-full bg-slate-700 text-slate-300 border border-slate-600">
-                    {FEAT_ICONS[f]} {f}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {/* Conversational refinement history */}
-            {conversation.length > 0 && (
-              <div className="flex flex-col gap-2 py-4">
-                {conversation.map((msg, i) => <ConvBubble key={i} msg={msg} />)}
-                {isRefining && (
-                  <div className="flex justify-start px-4">
-                    <div className="bg-slate-700/80 px-4 py-3 rounded-2xl rounded-bl-sm flex gap-1.5">
-                      {[0, 150, 300].map((d) => (
-                        <div key={d} className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: `${d}ms` }} />
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Trail cards */}
-            <div className="px-4 py-4 flex flex-col gap-4">
-              {filteredTrails.length === 0 && activeFilters.length > 0 ? (
-                <div className="text-center py-8 text-slate-400">
-                  <p className="text-sm">No trails match your filters</p>
-                  <button 
-                    onClick={() => setActiveFilters([])}
-                    className="mt-2 text-xs text-indigo-400 hover:text-indigo-300"
-                  >
-                    Clear filters
-                  </button>
-                </div>
-              ) : (
-                filteredTrails.map((trail, i) =>
-                  source === 'ai' ? (
-                  <AITrailCard
-                    key={i}
-                    trail={trail}
-                    index={i}
-                    isSelected={selectedIdx === i}
-                    onSelect={() => selectTrail(i)}
-                    cardRef={(el) => (cardRefs.current[i] = el)}
-                    onAskAI={(t) => { if (!isOffline) setChatTrail(t); setChatOpen(true); }}
-                    onSave={handleSaveHike}
-                    isSaved={savedIds.has(`${trail.name}-${trail.lat}`)}
-                    onCompareToggle={toggleCompare}
-                    isComparing={compareList.some(ct => ct.name === trail.name)}
-                    onStartHike={startHike}
-                    searchMode={searchMode}
-                  />
-                ) : (
-                  <FastTrailCard
-                    key={i}
-                    trail={trail}
-                    index={i}
-                    isSelected={selectedIdx === i}
-                    onSelect={() => selectTrail(i)}
-                    cardRef={(el) => (cardRefs.current[i] = el)}
-                    onSave={handleSaveHike}
-                    isSaved={savedIds.has(`${trail.name}-${trail.lat}`)}
-                    onStartHike={startHike}
-                  />
-                )
-                )
-              )}
-              <p className="text-center text-slate-600 text-xs pb-4">
-                Verified catalog results · check official conditions before hiking
-              </p>
-              
-              {hasMore && (
-                <button
-                  type="button"
-                  onClick={loadMore}
-                  disabled={isLoadingMore}
-                  className="w-full py-3 mb-24 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-white font-medium rounded-xl border border-slate-700 transition-colors flex items-center justify-center gap-2"
-                >
-                  {isLoadingMore ? (
-                    <>
-                      <div className="w-4 h-4 rounded-full border-2 border-indigo-400 border-t-transparent animate-spin" />
-                      Loading...
-                    </>
-                  ) : (
-                    'Load More Trails ↓'
-                  )}
-                </button>
-              )}
-            </div>
-          </>
-        )}
-
-        {status === 'done' && !hasTrails && (
-          <div className="m-6 rounded-2xl border border-amber-500/30 bg-amber-950/30 p-6 text-center">
-            <p className="text-lg font-semibold text-amber-100">No verified trails found</p>
-            <p className="mt-2 text-sm leading-relaxed text-amber-100/70">{coverageMessage || 'Verified trail coverage is currently available for Yosemite National Park.'}</p>
-            <button type="button" onClick={() => { setSearchQuery('Yosemite National Park'); setStatus('idle'); }} className="mt-5 rounded-xl bg-amber-200 px-5 py-2.5 text-sm font-bold text-amber-950">Search Yosemite</button>
-          </div>
-        )}
-
-        {/* ── Idle / search input state ── */}
-        {status === 'idle' && (
-          <div className="p-6 flex flex-col gap-6">
-            <div className="text-center pt-4">
-              <p className="text-5xl mb-4">🥾</p>
-              <h2 className="text-white text-xl font-bold mb-2">Find your perfect hike</h2>
-              <p className="text-slate-400 text-sm">Describe what you&apos;re after, or just tap search</p>
-            </div>
-
-            {/* Search History */}
-            <SearchHistory 
-              onSelect={(query) => {
-                setSearchQuery(query);
-                runSearch();
-              }}
-            />
-
-            {/* Natural language input */}
-            <div>
-              <textarea
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={'"Something peaceful with my dog, shaded, not too long…"'}
-                rows={3}
-                className="w-full bg-slate-800 border border-slate-600 rounded-2xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors resize-none"
-              />
-            </div>
-
-            {/* Quick Preferences */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-slate-500 text-xs">Quick Preferences</p>
-                <Link href="/personalize" className="text-indigo-400 text-xs hover:text-indigo-300 transition-colors">Full Personalization →</Link>
-              </div>
-              <div className="flex gap-2 overflow-x-auto scrollbar-none pb-1">
-                {['Easy', 'Moderate', 'Strenuous'].map(diff => {
-                  const isActive = preferences?.hiking?.difficulty?.includes(diff);
-                  return (
-                    <button
-                      key={diff}
-                      onClick={() => {
-                        setPreferences(prev => {
-                          const curDiff = prev.hiking?.difficulty || [];
-                          const nextDiff = isActive ? curDiff.filter(d => d !== diff) : [...curDiff, diff];
-                          const next = { ...prev, hiking: { ...(prev.hiking || {}), difficulty: nextDiff } };
-                          localStorage.setItem('userPreferences', JSON.stringify(next));
-                          return next;
-                        });
-                      }}
-                      className={`shrink-0 text-xs px-4 py-2 rounded-full border font-medium transition-colors ${
-                        isActive 
-                          ? 'bg-indigo-600 border-indigo-500 text-white' 
-                          : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
-                      }`}
-                    >
-                      {diff}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <button
-              onClick={() => runSearch()}
-              disabled={isOffline}
-              className="w-full py-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 disabled:from-slate-600 disabled:to-slate-700 text-white font-bold rounded-2xl shadow-lg transition-all duration-300 text-base"
-            >
-              {isOffline ? 'Offline - Connect to search' : 'Search verified trails →'}
-            </button>
-          </div>
-        )}
-        </>
-        )}
-      </div>
-
-      {/* ── Refinement bar — sticky bottom (AI-mode only) ── */}
-      {hasTrails && !isOffline && (
-        <div className="fixed md:absolute bottom-24 md:bottom-6 left-4 right-4 md:left-4 md:right-4 z-40 bg-slate-900/80 backdrop-blur-xl border border-slate-700/60 shadow-2xl rounded-2xl px-3 py-3 flex items-center gap-2 md:max-w-[calc(50%-2rem)]">
-          
-          {compareList.length > 0 && (
-            <button
-              onClick={() => setShowCompare(true)}
-              className="w-10 h-10 flex items-center justify-center bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600/30 rounded-xl transition-colors relative"
-            >
-              ⚖️
-              <span className="absolute -top-1 -right-1 bg-emerald-500 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
-                {compareList.length}
-              </span>
-            </button>
-          )}
-
-          <div className="flex-1 relative">
-            <input
-              value={refineInput}
-              onChange={(e) => setRefineInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleRefine()}
-              placeholder="Too long? Different vibe? Just tell me…"
-              className="w-full bg-slate-800 border border-slate-600 rounded-xl pl-4 pr-10 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
-              disabled={isRefining}
-            />
-            {isRefining ? (
-              <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                <div className="w-4 h-4 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
-              </div>
-            ) : (
-              <button onClick={handleVoiceSearch} className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-indigo-400 transition-colors">
-                🎙️
-              </button>
-            )}
-          </div>
-          <button
-            onClick={handleRefine}
-            disabled={!refineInput.trim() || isRefining}
-            className="w-10 h-10 flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white rounded-xl transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
-            </svg>
-          </button>
-        </div>
-      )}
       </div>
     </div>
   );

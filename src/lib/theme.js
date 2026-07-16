@@ -10,6 +10,10 @@ export const THEMES = [
   { id: 'daylight', name: 'Daylight', description: 'Warm paper · evergreen', colors: ['#f4f1e8', '#217a65', '#c87137'], dark: false },
 ];
 
+export function isDarkTheme(themeId) {
+  return THEMES.find(theme => theme.id === themeId)?.dark ?? true;
+}
+
 export const normalizeDisplayPreferences = (preferences = {}) => ({
   theme: THEME_IDS.includes(preferences.theme) ? preferences.theme : DEFAULT_THEME,
   themeMode: THEME_MODES.includes(preferences.themeMode) ? preferences.themeMode : 'manual',

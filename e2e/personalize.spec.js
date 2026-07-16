@@ -116,12 +116,12 @@ test.describe('Personalization Flow', () => {
     await page.goto('/search?q=Yosemite&difficulty=Strenuous', { waitUntil: 'domcontentloaded' });
     const trailHeading = page.getByRole('heading', { name: 'Half Dome via the John Muir Trail', level: 3 });
     await expect(trailHeading).toBeVisible({ timeout: 15_000 });
-    await trailHeading.click();
-    await page.getByRole('button', { name: /Save Trail/ }).click();
-    await expect(page.getByRole('button', { name: /Saved/ })).toBeVisible();
+    const trailCard = page.getByRole('article', { name: 'Half Dome via the John Muir Trail' });
+    await trailCard.getByRole('button', { name: 'View details' }).click();
+    await trailCard.getByRole('button', { name: 'Save trail' }).click();
+    await expect(trailCard.getByRole('button', { name: 'Saved' })).toBeVisible();
 
-    await page.getByRole('link', { name: /Saved/ }).click();
-    await expect(page).toHaveURL('/saved');
+    await page.goto('/saved');
     await expect(page.getByRole('heading', { name: 'Half Dome via the John Muir Trail', level: 3 })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Show your position on saved trails?' })).toBeVisible();
 

@@ -9,6 +9,16 @@ export const CATALOG_SOURCES = Object.freeze({
     allowedUses: ['park facts', 'trail facts', 'alerts', 'park boundaries'],
     requiresAttribution: true,
   },
+  caStateParks: {
+    id: 'ca-state-parks',
+    name: 'California State Parks',
+    kind: 'government-authoritative',
+    license: 'Official public information; source materials may be copyrighted',
+    attribution: 'Source: California State Parks',
+    homepage: 'https://www.parks.ca.gov/',
+    allowedUses: ['park facts', 'trail facts', 'accessibility facts', 'trail-use rules'],
+    requiresAttribution: true,
+  },
   osm: {
     id: 'osm',
     name: 'OpenStreetMap',
@@ -34,4 +44,3 @@ export const CATALOG_SOURCES = Object.freeze({
 export function getCatalogSource(sourceId) {
   return Object.values(CATALOG_SOURCES).find(source => source.id === sourceId) || null;
 }
-

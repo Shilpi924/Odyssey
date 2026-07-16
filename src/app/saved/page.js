@@ -3,9 +3,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { db } from '@/lib/db';
-import { MAP_CONFIG } from '@/lib/map-style';
+import { getMapStyleUrl } from '@/lib/map-style';
 import LocationAccessCard from '@/components/privacy/LocationAccessCard';
 import useLocationAccess from '@/hooks/useLocationAccess';
+import useResolvedTheme from '@/hooks/useResolvedTheme';
 import Map, { AttributionControl, Marker, Source, Layer } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import maplibregl from 'maplibre-gl';
@@ -60,6 +61,7 @@ function UserPin({ position }) {
 }
 
 export default function SavedHikesPage() {
+  const resolvedTheme = useResolvedTheme();
   const [savedHikes, setSavedHikes] = useState([]);
   const [userLoc, setUserLoc] = useState(null);
   const [quota, setQuota] = useState(null);
@@ -294,7 +296,7 @@ export default function SavedHikesPage() {
                 latitude: mapCenter?.lat || 37.7749,
                 zoom: mapZoom
               }}
-              mapStyle={MAP_CONFIG.styleUrl}
+              mapStyle={getMapStyleUrl(resolvedTheme)}
               attributionControl={false}
               style={{ width: '100%', height: '100%' }}
               onZoom={(e) => setMapZoom(e.viewState.zoom)}

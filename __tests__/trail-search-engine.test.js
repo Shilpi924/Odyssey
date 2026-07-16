@@ -9,10 +9,21 @@ describe('catalog entity resolution', () => {
     expect(resolveSearchEntity('hikes in Tuolumne Meadows')).toMatchObject({ type: 'region', id: 'tuolumne-meadows' });
     expect(resolveSearchEntity('Half Dome')).toMatchObject({ type: 'trail', id: 'half-dome-jmt' });
     expect(resolveSearchEntity('El Capitan')).toMatchObject({ type: 'trail', id: 'el-capitan-trail' });
+    expect(resolveSearchEntity('Diablo hike')).toMatchObject({ type: 'park', id: 'ca-sp-mount-diablo' });
+    expect(resolveSearchEntity('Mt. Diablo')).toMatchObject({ type: 'park', id: 'ca-sp-mount-diablo' });
+    expect(resolveSearchEntity('Mary Bowerman Trail')).toMatchObject({ type: 'trail', id: 'mount-diablo-mary-bowerman-trail' });
   });
 
   it('leaves uncovered destinations unresolved instead of guessing', () => {
     expect(resolveSearchEntity('hikes in Zion')).toBeNull();
+  });
+
+  it('matches trail aliases as bounded phrases inside natural requests', () => {
+    expect(resolveSearchEntity('show me the Half Dome hike')).toMatchObject({ type: 'trail', id: 'half-dome-jmt' });
+    expect(resolveSearchEntity('find a scenic Mary Bowerman hike')).toMatchObject({ type: 'trail', id: 'mount-diablo-mary-bowerman-trail' });
+    expect(resolveSearchEntity('Mount Diablo Falls Trail in Mount Diablo')).toMatchObject({ type: 'trail', id: 'mount-diablo-falls-trail' });
+    expect(resolveSearchEntity('half domed hiking routes')).toBeNull();
+    expect(resolveSearchEntity('diabolical hiking routes')).toBeNull();
   });
 });
 
@@ -63,5 +74,29 @@ describe('structured catalog search', () => {
     const search = searchCatalog({ query: 'hikes in Hetch Hetchy' });
     expect(search.results.length).toBeGreaterThan(0);
     expect(search.results.every(result => result.trail.geography.region === 'Hetch Hetchy')).toBe(true);
+  });
+
+  it('keeps Mount Diablo searches inside the selected park', () => {
+    const search = searchCatalog({ query: 'hikes in Mount Diablo' });
+    expect(search.results.length).toBe(7);
+    expect(search.results.every(result => result.trail.geography.parkId === 'ca-sp-mount-diablo')).toBe(true);
+  });
+
+  it('ranks documented routes ahead of alias-only matches for generic park searches', () => {
+    const ids = searchCatalog({ query: 'Diablo hike' }).results.map(result => result.trail.id);
+    expect(ids.slice(0, 3)).toEqual(expect.arrayContaining([
+      'mount-diablo-curry-point-to-summit',
+      'mount-diablo-juniper-trail-to-summit',
+      'mount-diablo-mary-bowerman-trail',
+    ]));
+    expect(ids.indexOf('mount-diablo-falls-trail')).toBeGreaterThan(ids.indexOf('mount-diablo-mary-bowerman-trail'));
+  });
+
+  it('retains trails with unknown difficulty instead of fabricating or hiding it', () => {
+    const search = searchCatalog({ query: 'strenuous hikes in Mount Diablo' });
+    expect(search.results.length).toBeGreaterThan(0);
+    expect(search.results[0].trail.id).toBe('mount-diablo-curry-point-to-summit');
+    expect(search.results.some(result => result.trail.difficulty == null)).toBe(true);
+    expect(search.results.every(result => result.trail.difficulty == null || result.trail.difficulty === 'Strenuous')).toBe(true);
   });
 });

@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
+import { CLAUDE_MODEL } from '@/lib/anthropic-model';
 
 export async function POST(request) {
   try {
@@ -50,7 +51,7 @@ When a user states that they are lost, injured, stranded, disoriented, or unable
     ];
 
     const response = await client.messages.create({
-      model: 'claude-opus-4-5',
+      model: CLAUDE_MODEL,
       max_tokens: 2000,
       system,
       messages,

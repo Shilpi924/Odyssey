@@ -11,6 +11,7 @@
   --app-accent: #ffb86b;
   --app-border: rgba(195, 228, 229, .14);
   --app-glow: rgba(65, 207, 185, .16);
+  --mobile-nav-clearance: calc(4rem + max(0.5rem, env(safe-area-inset-bottom)));
   --background: var(--app-bg);
   --foreground: var(--app-text);
 }
@@ -121,19 +122,22 @@ body {
   transition-duration: .01ms !important;
 }
 
-/* Raster maps inherit a subtle palette treatment; markers and labels stay readable. */
-[data-theme="alpine"] .maplibregl-canvas { filter: saturate(.78) hue-rotate(8deg) brightness(.88) contrast(1.08); }
-[data-theme="meadow"] .maplibregl-canvas { filter: saturate(.82) hue-rotate(-8deg) brightness(.88) contrast(1.06); }
-[data-theme="sunset"] .maplibregl-canvas { filter: saturate(.7) sepia(.12) hue-rotate(325deg) brightness(.84) contrast(1.08); }
-[data-theme="daylight"] .maplibregl-canvas { filter: saturate(.78) brightness(1.03) contrast(.96); }
-[data-contrast="high"] .maplibregl-canvas { filter: contrast(1.2) saturate(.9); }
-[data-motion="reduced"] .maplibregl-canvas { transition: none !important; }
-
 .maplibregl-ctrl-group,
 .maplibregl-popup-content {
   background: var(--app-surface) !important;
   color: var(--app-text) !important;
   border-color: var(--app-border) !important;
+}
+
+.maplibregl-popup-content {
+  border: 1px solid var(--app-border);
+  border-radius: 1rem;
+  padding: 0 !important;
+  box-shadow: 0 18px 45px rgba(0, 0, 0, .28);
+}
+
+.maplibregl-popup-tip {
+  border-top-color: var(--app-surface) !important;
 }
 
 ::selection {

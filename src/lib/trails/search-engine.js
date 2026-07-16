@@ -1,11 +1,36 @@
-import { getParkById, getTrailsByParkId } from './catalog';
-
-const BASE_ENTITY_INDEX = [
-  { type: 'park', id: 'nps-yose', name: 'Yosemite National Park', aliases: ['yosemite', 'yosemite national park', 'yosemite np'] },
-];
+import { getParkById, getParks, getTrailsByParkId } from './catalog';
 
 function terms(value) {
   return String(value || '').toLowerCase().match(/[a-z0-9]+/g) || [];
+}
+
+const GENERIC_TRAIL_SUFFIXES = new Set(['hike', 'trail']);
+const GENERIC_QUERY_TERMS = new Set([
+  'a', 'an', 'around', 'at', 'by', 'current', 'find', 'for', 'hike', 'hikes',
+  'hiking', 'in', 'location', 'me', 'my', 'near', 'nearby', 'of', 'please',
+  'show', 'the', 'to', 'trail', 'trails', 'via',
+]);
+
+function includesTokenPhrase(queryTerms, phraseTerms) {
+  if (!phraseTerms.length || phraseTerms.length > queryTerms.length) return false;
+  return queryTerms.some((_, start) =>
+    phraseTerms.every((term, offset) => queryTerms[start + offset] === term)
+  );
+}
+
+function trailAliasVariants(alias) {
+  const aliasTerms = terms(alias);
+  const variants = [aliasTerms];
+  const shortened = [...aliasTerms];
+  while (shortened.length > 1 && GENERIC_TRAIL_SUFFIXES.has(shortened.at(-1))) shortened.pop();
+  if (shortened.length >= 2 && shortened.length < aliasTerms.length) variants.push(shortened);
+  return variants;
+}
+
+function entityPriority(type) {
+  if (type === 'trail') return 3;
+  if (type === 'region') return 2;
+  return 1;
 }
 
 function textIncludesAll(text, requestedTerms) {
@@ -14,26 +39,44 @@ function textIncludesAll(text, requestedTerms) {
 }
 
 export function resolveSearchEntity(query) {
-  const normalized = String(query || '').trim().toLowerCase();
-  if (!normalized) return null;
+  const queryTerms = terms(query);
+  if (!queryTerms.length) return null;
 
-  const parkTrails = getTrailsByParkId('nps-yose');
-  const trailMatch = parkTrails.find(trail =>
-    [trail.name, ...trail.aliases].some(name => normalized === name.toLowerCase())
-  );
-  if (trailMatch) return { type: 'trail', id: trailMatch.id, name: trailMatch.name, parkId: trailMatch.geography.parkId, confidence: 1 };
-
-  const regions = [...new Set(parkTrails.map(trail => trail.geography.region).filter(Boolean))]
-    .map(name => ({ type: 'region', id: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), parkId: 'nps-yose', name, aliases: [name.toLowerCase()] }));
-  const entityMatch = [...BASE_ENTITY_INDEX, ...regions]
-    .map(entity => ({
-      ...entity,
-      matchedAlias: entity.aliases.find(alias => normalized.includes(alias)),
-    }))
-    .filter(entity => entity.matchedAlias)
-    .sort((a, b) => b.matchedAlias.length - a.matchedAlias.length)[0];
+  const parks = getParks();
+  const parkTrails = parks.flatMap(park => getTrailsByParkId(park.id));
+  const trailEntities = parkTrails.map(trail => ({
+    type: 'trail',
+    id: trail.id,
+    name: trail.name,
+    parkId: trail.geography.parkId,
+    aliases: [trail.name, ...(trail.aliases || [])].flatMap(trailAliasVariants),
+  }));
+  const parkEntities = parks.map(park => ({
+    type: 'park',
+    id: park.id,
+    name: park.name,
+    aliases: [park.name, ...(park.aliases || [])].map(terms),
+  }));
+  const regions = parks.flatMap(park => [...new Set(getTrailsByParkId(park.id).map(trail => trail.geography.region).filter(Boolean))]
+    .map(name => ({ type: 'region', id: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), parkId: park.id, name, aliases: [terms(name)] })));
+  const entityMatch = [...trailEntities, ...parkEntities, ...regions]
+    .flatMap(entity => entity.aliases.map(aliasTerms => ({ ...entity, aliasTerms })))
+    .filter(entity => includesTokenPhrase(queryTerms, entity.aliasTerms))
+    .sort((a, b) =>
+      b.aliasTerms.length - a.aliasTerms.length
+      || entityPriority(b.type) - entityPriority(a.type)
+      || b.aliasTerms.join(' ').length - a.aliasTerms.join(' ').length
+    )[0];
   if (!entityMatch) return null;
-  return { type: entityMatch.type, id: entityMatch.id, name: entityMatch.name, parkId: entityMatch.parkId, confidence: 0.95 };
+  const exactMatch = entityMatch.aliasTerms.length === queryTerms.length;
+  return {
+    type: entityMatch.type,
+    id: entityMatch.id,
+    name: entityMatch.name,
+    parkId: entityMatch.parkId,
+    confidence: exactMatch ? 1 : 0.95,
+    matchedAlias: entityMatch.aliasTerms.join(' '),
+  };
 }
 
 export function deriveSearchFilters(query, preferences = {}) {
@@ -64,7 +107,7 @@ export function deriveSearchFilters(query, preferences = {}) {
 }
 
 export function trailMatchesFilters(trail, filters) {
-  if (filters.difficulties?.length && !filters.difficulties.includes(trail.difficulty)) return false;
+  if (filters.difficulties?.length && trail.difficulty && !filters.difficulties.includes(trail.difficulty)) return false;
   if (filters.activities?.length && !filters.activities.some(activity => trail.activities.includes(activity))) return false;
   if (filters.features?.length && !filters.features.every(feature => trail.features.includes(feature))) return false;
   if (filters.minDistanceMiles != null && (trail.route.distanceMiles == null || trail.route.distanceMiles < filters.minDistanceMiles)) return false;
@@ -74,7 +117,10 @@ export function trailMatchesFilters(trail, filters) {
 }
 
 export function scoreTrail(trail, { query, entity, filters }) {
-  const queryTerms = terms(query).filter(term => !['hike', 'hikes', 'hiking', 'trail', 'trails', 'in', 'near'].includes(term));
+  const geographicTerms = entity?.type === 'park' || entity?.type === 'region'
+    ? new Set(terms(entity.matchedAlias || entity.name))
+    : new Set();
+  const queryTerms = terms(query).filter(term => !GENERIC_QUERY_TERMS.has(term) && !geographicTerms.has(term));
   const searchable = [trail.name, ...trail.aliases, ...trail.features, trail.geography.region].join(' ');
   const nameMatch = terms(trail.name).filter(term => queryTerms.includes(term)).length;
   const exactTrail = entity?.type === 'trail' && entity.id === trail.id;
@@ -85,12 +131,12 @@ export function scoreTrail(trail, { query, entity, filters }) {
     filters.minDistanceMiles == null || (trail.route.distanceMiles != null && trail.route.distanceMiles >= filters.minDistanceMiles),
     filters.maxDistanceMiles == null || (trail.route.distanceMiles != null && trail.route.distanceMiles <= filters.maxDistanceMiles),
   ].filter(Boolean).length;
-  const completeness = [trail.route.distanceMiles, trail.route.elevationGainFeet, trail.source.sourceUrl].filter(value => value != null).length;
+  const completeness = [trail.route.distanceMiles, trail.route.elevationGainFeet, trail.difficulty, trail.source.sourceUrl].filter(value => value != null).length;
 
   return (exactTrail ? 100 : 0)
     + (geographicMatch ? 30 : 0)
     + nameMatch * 12
-    + (textIncludesAll(searchable, queryTerms) ? 10 : 0)
+    + (queryTerms.length && textIncludesAll(searchable, queryTerms) ? 10 : 0)
     + filterMatches * 8
     + completeness * 2
     - (trail.access.status === 'Closed' ? 100 : 0);
@@ -133,6 +179,7 @@ export function toLegacySearchResult(trail, score, origin) {
     vicinity: [trail.geography.region, trail.geography.state].filter(Boolean).join(', '),
     routeType: trail.route.type,
     access: trail.access,
+    difficultyMethod: trail.source.difficultyMethod || null,
     sourceAttribution: trail.source.attribution,
     sourceUrl: trail.source.sourceUrl,
     geometrySource: trail.source.geometry,

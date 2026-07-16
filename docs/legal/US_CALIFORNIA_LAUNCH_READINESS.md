@@ -1,14 +1,14 @@
 # United States and California Launch Readiness
 
-Status: pre-production engineering record, last reviewed July 13, 2026.
+Status: pre-production engineering record, last reviewed July 15, 2026.
 
 This document records product facts, engineering controls, and unresolved launch gates. It is not legal advice, does not establish that any law applies or does not apply, and must not be represented as an attorney’s approval.
 
 ## Recommended initial scope
 
-Market the first release as a California-first Yosemite pilot. Apply a United States federal and California baseline to the product, privacy notice, security practices, and incident planning. Do not describe the service as legally limited to California merely because its verified trail catalog is limited to Yosemite; an online service can still be accessed elsewhere and other laws may apply.
+Market the first release as a California-first trail pilot with officially sourced catalog coverage for Yosemite National Park and Mount Diablo State Park. Apply a United States federal and California baseline to the product, privacy notice, security practices, and incident planning. Do not describe the service as legally limited to California merely because its official catalog is currently limited to two California parks; an online service can still be accessed elsewhere, and community-mapped search can return results outside the catalog.
 
-This scope is easier to review than a nationwide trail launch because the current catalog, park alerts, and verified coverage are already centered on Yosemite. Expansion to another state requires a new state-law and product-claim review before that state is marketed or its trail catalog is enabled.
+This scope is easier to review than a nationwide trail launch because the official catalog is centered on Yosemite and Mount Diablo, with NPS alerts and boundary retrieval currently applicable to Yosemite. Expansion to another state requires a new state-law and product-claim review before that state is marketed or its official trail catalog is enabled.
 
 ## Release stages
 
@@ -33,7 +33,7 @@ Run every production gate in this document when the operator selects the product
 | Active-hike GPS points and saved trail facts | IndexedDB on the user’s device | Not uploaded by the current routes |
 | Display preferences | Browser storage and theme cookie; optional database storage for a signed-in user | Odyssey database when the user saves authenticated preferences |
 | Account identity | Google sign-in and a JWT session cookie | Google, Odyssey session handling, and the preference database |
-| Basemap and route display | Live provider requests; no Odyssey offline basemap package | Stadia Maps; OpenStreetMap infrastructure for identified relation geometry |
+| Basemap, place lookup, community search, and route display | Live provider requests; trail geometry is retrieved through Odyssey on demand; no Odyssey offline basemap package | Stadia Maps; OpenStreetMap infrastructure for place lookup, community trails, and identified relation geometry; California State Parks ArcGIS for official Mount Diablo route geometry |
 | External directions | User-selected outbound link | Google receives selected coordinates and ordinary network metadata |
 | Community submissions, payments, ads, and analytics | Not enabled | None in the current product |
 
@@ -79,6 +79,7 @@ These are project release controls, not a statement that every item is independe
 - A retention schedule for server logs, account preferences, support requests, and incident records.
 - An incident-response owner, private escalation channel, breach-assessment checklist, and notification templates.
 - A commercial Stadia plan and production-domain authentication.
+- Confirmation that the production uses and attribution for National Park Service, California State Parks ArcGIS, and OpenStreetMap data have been reviewed against current provider terms and notices.
 - Confirmation that community uploads, public profiles, reviews, photos, and route sharing remain disabled until moderation, reporting, takedown, appeal, abuse-prevention, and audit controls are operational.
 - A final deployed-environment review confirming that no undeclared analytics, advertising, session replay, pixels, or provider SDKs are active.
 

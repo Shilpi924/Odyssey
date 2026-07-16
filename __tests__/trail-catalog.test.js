@@ -5,13 +5,14 @@ import {
   getTrailsByParkId, pointInParkSearchBoundary,
 } from '../src/lib/trails/catalog.js';
 import { YOSEMITE_PARK } from '../src/data/catalog/parks/yosemite.js';
+import { MOUNT_DIABLO_PARK } from '../src/data/catalog/parks/mount-diablo.js';
 
-describe('Phase 2 Yosemite trail catalog', () => {
-  it('contains a valid initial Yosemite catalog', () => {
+describe('verified trail catalog', () => {
+  it('contains valid Yosemite and Mount Diablo catalogs', () => {
     const audit = auditCatalog();
     expect(audit.valid).toBe(true);
-    expect(audit.parkCount).toBe(1);
-    expect(audit.trailCount).toBeGreaterThanOrEqual(40);
+    expect(audit.parkCount).toBeGreaterThanOrEqual(2);
+    expect(audit.trailCount).toBeGreaterThanOrEqual(50);
   });
 
   it('covers Yosemite regions beyond the Valley', () => {
@@ -29,6 +30,30 @@ describe('Phase 2 Yosemite trail catalog', () => {
   it('indexes points against the Yosemite search boundary', () => {
     expect(pointInParkSearchBoundary({ lat: 37.7459, lng: -119.5332 }, YOSEMITE_PARK)).toBe(true);
     expect(getParksContainingPoint({ lat: 37.7749, lng: -122.4194 })).toEqual([]);
+  });
+
+  it('indexes Mount Diablo trailheads inside its discovery envelope', () => {
+    const trails = getTrailsByParkId('ca-sp-mount-diablo');
+    expect(trails).toHaveLength(7);
+    expect(trails.every(trail => pointInParkSearchBoundary(trail.trailhead, MOUNT_DIABLO_PARK))).toBe(true);
+    expect(getParksContainingPoint({ lat: 37.88, lng: -121.92 }).map(park => park.id)).toContain('ca-sp-mount-diablo');
+  });
+
+  it('keeps Mount Diablo facts and geometry tied to California State Parks', () => {
+    const trails = getTrailsByParkId('ca-sp-mount-diablo');
+    expect(trails.map(trail => trail.id)).toEqual(expect.arrayContaining([
+      'mount-diablo-mary-bowerman-trail', 'mount-diablo-juniper-trail-to-summit', 'mount-diablo-falls-trail',
+      'mount-diablo-curry-point-to-summit',
+    ]));
+    expect(trails.every(trail => trail.source.provider === 'ca-state-parks')).toBe(true);
+    expect(trails.filter(trail => trail.source.geometry).every(trail => trail.source.geometry.provider === 'ca-state-parks-arcgis')).toBe(true);
+    const curryPoint = trails.find(trail => trail.id === 'mount-diablo-curry-point-to-summit');
+    expect(curryPoint).toMatchObject({
+      difficulty: 'Strenuous',
+      route: { distanceMiles: 8.2, elevationGainFeet: 2500 },
+    });
+    expect(curryPoint.source.geometry).toBeNull();
+    expect(getCatalogAttributions(trails)).toEqual(['Source: California State Parks']);
   });
 
   it('returns required source attribution', () => {

@@ -1,0 +1,131 @@
+const CSP_DISCOVERY_DAY = 'https://www.parks.ca.gov/NewsRelease/887';
+const CSP_TRAIL_USE_POLICY = 'https://www.parks.ca.gov/pages/561/files/680-19-029%20-%20Diablo%20Range%20District%20Trail%20Use%20Policy.pdf';
+const CSP_RTMP_PLAN = 'https://www.parks.ca.gov/pages/1324/files/mdsp%20rtmp%20final.sm.pdf';
+const CSP_TRAIL_LAYER = 'https://services2.arcgis.com/AhxrK3F6WM8ECvDi/arcgis/rest/services/Click_able_Layers/FeatureServer/4';
+
+function createMountDiabloTrail({
+  id, name, aliases = [], region, trailhead, route, difficulty = null,
+  difficultyMethod = null, features = [], sourceUrl, featureIds,
+}) {
+  return {
+    id: `mount-diablo-${id}`,
+    slug: `mount-diablo-${id}`,
+    name,
+    aliases,
+    geography: {
+      parkId: 'ca-sp-mount-diablo',
+      parkName: 'Mount Diablo State Park',
+      region,
+      locality: 'Contra Costa County',
+      state: 'CA',
+      countryCode: 'US',
+    },
+    trailhead,
+    route,
+    difficulty,
+    activities: ['Hiking'],
+    features,
+    access: { status: 'Unknown' },
+    source: {
+      provider: 'ca-state-parks',
+      externalId: name,
+      sourceUrl,
+      license: 'Official public information; source materials may be copyrighted',
+      attribution: 'Source: California State Parks',
+      ...(featureIds?.length ? {
+        geometry: {
+          provider: 'ca-state-parks-arcgis',
+          featureIds,
+          unitNumber: 203,
+          license: 'Copyright California Department of Parks and Recreation',
+          attribution: 'Source: California State Parks',
+          sourceUrl: `${CSP_TRAIL_LAYER}?f=pjson`,
+        },
+      } : {}),
+      difficultyMethod,
+    },
+  };
+}
+
+export const MOUNT_DIABLO_TRAILS = Object.freeze([
+  createMountDiabloTrail({
+    id: 'mary-bowerman-trail',
+    name: 'Mary Bowerman Trail',
+    aliases: ['Mary Bowerman Trail Loop', 'Mary Bowerman Interpretive Trail'],
+    region: 'Summit Area',
+    trailhead: { lat: 37.8809530, lng: -121.9170676 },
+    route: { type: 'Loop', distanceMiles: 0.7, elevationGainFeet: null },
+    difficulty: 'Easy',
+    difficultyMethod: 'odyssey-official-description-v1',
+    features: ['Accessible first 0.2 mi', 'Interpretive', 'Scenic'],
+    sourceUrl: CSP_DISCOVERY_DAY,
+    featureIds: [3217],
+  }),
+  createMountDiabloTrail({
+    id: 'juniper-trail-to-summit',
+    name: 'Juniper Trail to Summit',
+    aliases: ['Juniper Trail', 'Juniper Trail Hike'],
+    region: 'Juniper Campground',
+    trailhead: { lat: 37.8769630, lng: -121.9308452 },
+    route: { type: 'Out and back', distanceMiles: 2.4, elevationGainFeet: 760 },
+    difficulty: 'Moderate',
+    difficultyMethod: 'odyssey-distance-elevation-v1',
+    features: ['Summit', 'Scenic', 'Shaded', 'Chaparral'],
+    sourceUrl: CSP_DISCOVERY_DAY,
+    featureIds: [2636],
+  }),
+  createMountDiabloTrail({
+    id: 'curry-point-to-summit',
+    name: 'Curry Point to Summit Hike',
+    aliases: ['Curry Point Hike', 'Curry Point to Summit'],
+    region: 'Curry Point',
+    // California State Parks identifies the Curry Point parking lot as the start.
+    trailhead: { lat: 37.8520634, lng: -121.9254198 },
+    route: { type: 'Out and back', distanceMiles: 8.2, elevationGainFeet: 2500 },
+    difficulty: 'Strenuous',
+    difficultyMethod: 'official',
+    features: ['Summit', 'Scenic'],
+    sourceUrl: CSP_DISCOVERY_DAY,
+  }),
+  createMountDiabloTrail({
+    id: 'north-peak-trail',
+    name: 'North Peak Trail',
+    region: 'North Peak',
+    trailhead: { lat: 37.8797857, lng: -121.9140179 },
+    route: { type: 'Point to point', distanceMiles: null, elevationGainFeet: null },
+    features: ['Summit'],
+    sourceUrl: CSP_TRAIL_USE_POLICY,
+    featureIds: [3725, 3726],
+  }),
+  createMountDiabloTrail({
+    id: 'eagle-peak-trail',
+    name: 'Eagle Peak Trail',
+    region: 'Mitchell Canyon',
+    trailhead: { lat: 37.8949105, lng: -121.9295026 },
+    route: { type: 'Point to point', distanceMiles: null, elevationGainFeet: null },
+    features: ['Summit'],
+    sourceUrl: CSP_TRAIL_USE_POLICY,
+    featureIds: [1692],
+  }),
+  createMountDiabloTrail({
+    id: 'back-creek-trail',
+    name: 'Back Creek Trail',
+    region: 'Mitchell Canyon',
+    trailhead: { lat: 37.8949786, lng: -121.9294404 },
+    route: { type: 'Point to point', distanceMiles: null, elevationGainFeet: null },
+    features: [],
+    sourceUrl: CSP_TRAIL_USE_POLICY,
+    featureIds: [297],
+  }),
+  createMountDiabloTrail({
+    id: 'falls-trail',
+    name: 'Falls Trail',
+    aliases: ['Mount Diablo Falls Trail'],
+    region: 'Mitchell Canyon',
+    trailhead: { lat: 37.8995955, lng: -121.9175795 },
+    route: { type: 'Point to point', distanceMiles: null, elevationGainFeet: null },
+    features: ['Waterfall'],
+    sourceUrl: CSP_RTMP_PLAN,
+    featureIds: [1891],
+  }),
+]);

@@ -1,12 +1,12 @@
 # 🥾 Odyssey
 
-Odyssey is an early-stage trail discovery and local GPS tool built around explicitly sourced catalog data. Verified search coverage currently focuses on Yosemite National Park and includes Half Dome, El Capitan, and other official trail records without relying on scraped AllTrails content or guessed provider results.
+Odyssey is an early-stage trail discovery and local GPS tool built around explicitly sourced data. Official trail coverage includes Yosemite National Park and Mount Diablo State Park, while OpenStreetMap community data expands destination and nearby discovery without relying on scraped AllTrails content or invented provider facts.
 
 ## Current capabilities
 
-- Verified Yosemite trail search with difficulty and feature filters
+- Official Yosemite and Mount Diablo trail search plus OpenStreetMap destination and near-me discovery
 - National Park Service alerts and source links
-- OpenStreetMap trail relation geometry where a catalog record identifies it
+- Official California State Parks geometry for Mount Diablo and reviewed OpenStreetMap relation geometry for Yosemite
 - Interactive MapLibre map using a Stadia Maps vector basemap with visible attribution
 - Locally saved trail facts and on-device GPS recording
 - Optional authenticated preference storage
@@ -18,7 +18,7 @@ The app intentionally returns a coverage message outside its verified catalog. I
 
 - Next.js 16 App Router and React 19
 - MapLibre GL and react-map-gl
-- National Park Service and OpenStreetMap source data
+- National Park Service, California State Parks, and OpenStreetMap source data
 - Dexie/IndexedDB for local saved trails and active GPS records
 - NextAuth with optional Google sign-in
 - PostgreSQL for optional authenticated preferences
@@ -41,6 +41,8 @@ NPS_API_KEY=your_nps_api_key
 ```
 
 Optional account, database, and AI variables are documented in `.env.example`. Secret values must remain server-only and `.env.local` must never be committed.
+
+Destination lookup and community trail discovery default to the public Nominatim and Overpass endpoints for low-volume, user-triggered beta use. Responses are cached, nearby coordinates are rounded to roughly 100-meter precision, and both endpoints can be replaced through `NOMINATIM_BASE_URL` and `OVERPASS_BASE_URL`. Use self-hosted or appropriately contracted providers before traffic exceeds the public-service policies.
 
 Local map development uses Stadia Maps without an API key. Before production, upgrade to a commercial Stadia plan and add the production domain in Stadia’s authentication settings. `NEXT_PUBLIC_MAP_STYLE_URL` is an optional public style override, not a secret.
 

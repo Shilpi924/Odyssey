@@ -1,13 +1,10 @@
 'use client';
 
-import { useRouter, usePathname } from 'next/navigation';
-import { motion } from 'framer-motion';
-import { useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
-const navItems = [
+const NAV_ITEMS = [
   { id: 'home', label: 'Discover', icon: '🧭', href: '/' },
-  { id: 'search', label: 'Map', icon: '🗺️', href: '/search?view=map#trail-map' },
-  { id: 'track', label: 'Track', icon: '🥾', href: '/search?view=track#trail-map', isPrimary: true },
+  { id: 'map', label: 'Map', icon: '🗺️', href: '/search' },
   { id: 'saved', label: 'Saved', icon: '💾', href: '/saved' },
   { id: 'personalize', label: 'Profile', icon: '👤', href: '/personalize' },
 ];
@@ -15,134 +12,49 @@ const navItems = [
 export default function BottomNavigation() {
   const router = useRouter();
   const pathname = usePathname();
-  const [selectedTab, setSelectedTab] = useState(null);
-  const activeTab = selectedTab || (pathname === '/search' ? 'search' : navItems.find(item => pathname === item.href)?.id || 'home');
+  const searchParams = useSearchParams();
+  const activeTab = pathname === '/search'
+    ? (searchParams.get('view') === 'map' ? 'map' : 'home')
+    : NAV_ITEMS.find(item => item.href === pathname)?.id || 'home';
 
   const handleNav = (item) => {
-    setSelectedTab(item.id);
-    router.push(item.href);
+    if (item.id !== 'map') {
+      router.push(item.href);
+      return;
+    }
+
+    const params = pathname === '/search'
+      ? new URLSearchParams(searchParams.toString())
+      : new URLSearchParams();
+    params.set('view', 'map');
+    router.push(`/search?${params.toString()}#trail-map`);
   };
 
   return (
-    <motion.div
-      initial={{ y: 100 }}
-      animate={{ y: 0 }}
-      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-      className="fixed bottom-0 left-0 right-0 z-50 md:hidden"
-    >
-      <div className="bg-slate-900/95 backdrop-blur-xl border-t border-slate-700/50 px-6 py-3 pb-safe">
-        <div className="flex items-center justify-around">
-          {navItems.map((item) => {
+    <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-50 md:hidden">
+      <div className="border-t border-[var(--app-border)] bg-[var(--app-bg)]/95 px-4 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-xl">
+        <div className="grid grid-cols-4 gap-1">
+          {NAV_ITEMS.map(item => {
             const isActive = activeTab === item.id;
-            
             return (
               <button
+                type="button"
                 key={item.id}
+                aria-current={isActive ? 'page' : undefined}
                 onClick={() => handleNav(item)}
-                className="relative flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-all duration-300 group"
+                className={`relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-2 py-1.5 text-xs font-semibold transition-colors ${
+                  isActive
+                    ? 'bg-[var(--app-primary)]/15 text-[var(--app-primary)]'
+                    : 'text-[var(--app-muted)] hover:bg-[var(--app-surface)] hover:text-[var(--app-text)]'
+                }`}
               >
-                {/* Active indicator */}
-                {isActive && (
-                  <motion.div
-                    layoutId="activeTab"
-                    className="absolute inset-0 bg-indigo-500/20 rounded-xl"
-                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                  />
-                )}
-
-                {/* Icon */}
-                <span className={`text-2xl relative z-10 transition-transform duration-300 ${
-                  isActive ? 'scale-110' : 'scale-100 group-hover:scale-110'
-                }`}>
-                  {item.icon}
-                </span>
-
-                {/* Label */}
-                <span className={`text-xs font-medium relative z-10 transition-colors ${
-                  isActive ? 'text-indigo-300' : 'text-slate-400 group-hover:text-slate-300'
-                }`}>
-                  {item.label}
-                </span>
-
-                {/* Active dot */}
-                {isActive && (
-                  <motion.div
-                    layoutId="activeDot"
-                    className="absolute -bottom-1 w-1 h-1 bg-indigo-400 rounded-full"
-                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-                  />
-                )}
+                <span aria-hidden="true" className="text-xl leading-none">{item.icon}</span>
+                <span>{item.label}</span>
               </button>
             );
           })}
         </div>
       </div>
-
-      {/* Safe area for iPhone X+ */}
-      <div className="h-safe-area-bottom bg-slate-900" />
-    </motion.div>
-  );
-}
-
-// Floating action button version for quick actions
-export function FloatingNav() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const [isOpen, setIsOpen] = useState(false);
-
-  const quickActions = [
-    { icon: '🔍', label: 'Search', href: '/search', color: 'bg-indigo-500' },
-    { icon: '📍', label: 'Near Me', href: '/search?q=near me', color: 'bg-emerald-500' },
-    { icon: '🥾', label: 'Hikes', href: '/search?q=hikes', color: 'bg-amber-500' },
-    { icon: '🍔', label: 'Food', href: '/search?q=food', color: 'bg-rose-500' },
-  ];
-
-  return (
-    <div className="fixed bottom-6 right-6 z-50 md:hidden">
-      <div className="relative">
-        {/* Expanded menu */}
-        <motion.div
-          initial={false}
-          animate={{
-            height: isOpen ? 'auto' : 0,
-            opacity: isOpen ? 1 : 0,
-          }}
-          className="absolute bottom-16 right-0 overflow-hidden"
-        >
-          <div className="flex flex-col gap-2 mb-2">
-            {quickActions.map((action, index) => (
-              <motion.button
-                key={action.label}
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{
-                  scale: isOpen ? 1 : 0,
-                  opacity: isOpen ? 1 : 0,
-                }}
-                transition={{
-                  delay: isOpen ? index * 0.1 : 0,
-                  type: 'spring',
-                  stiffness: 200,
-                }}
-                onClick={() => router.push(action.href)}
-                className={`${action.color} text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 hover:scale-105 transition-transform`}
-              >
-                <span className="text-xl">{action.icon}</span>
-                <span className="font-medium text-sm">{action.label}</span>
-              </motion.button>
-            ))}
-          </div>
-        </motion.div>
-
-        {/* Main FAB */}
-        <motion.button
-          animate={{ rotate: isOpen ? 45 : 0 }}
-          transition={{ type: 'spring', stiffness: 200 }}
-          onClick={() => setIsOpen(!isOpen)}
-          className="w-14 h-14 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full shadow-2xl shadow-indigo-500/30 flex items-center justify-center text-white text-2xl hover:scale-110 transition-transform"
-        >
-          {isOpen ? '✕' : '+'}
-        </motion.button>
-      </div>
-    </div>
+    </nav>
   );
 }

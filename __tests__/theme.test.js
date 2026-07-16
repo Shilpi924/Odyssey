@@ -1,7 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { createElement } from 'react';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_THEME,
   getLocalSunWindow,
+  isDarkTheme,
   isDaylight,
   normalizeDisplayPreferences,
   parseDisplayPreferences,
@@ -9,6 +12,16 @@ import {
   serializeDisplayPreferences,
 } from '../src/lib/theme';
 import { applyDisplayPreferences } from '../src/components/ThemeProvider';
+import useResolvedTheme from '../src/hooks/useResolvedTheme';
+
+function ThemeProbe() {
+  const theme = useResolvedTheme();
+  return createElement('output', { 'aria-label': 'Resolved theme' }, theme);
+}
+
+afterEach(() => {
+  cleanup();
+});
 
 describe('display theme preferences', () => {
   it('normalizes invalid and missing values safely', () => {
@@ -34,6 +47,12 @@ describe('display theme preferences', () => {
     const preferences = { theme: 'sunset', themeMode: 'system' };
     expect(resolveTheme(preferences, { systemDark: false })).toBe('daylight');
     expect(resolveTheme(preferences, { systemDark: true })).toBe('sunset');
+  });
+
+  it('identifies light and dark theme metadata for map styling', () => {
+    expect(isDarkTheme('daylight')).toBe(false);
+    expect(isDarkTheme('alpine')).toBe(true);
+    expect(isDarkTheme('future-theme')).toBe(true);
   });
 
   it('uses Alpine for a dark system when Daylight is selected', () => {
@@ -72,5 +91,16 @@ describe('display theme preferences', () => {
     expect(document.documentElement.dataset.theme).toBe('meadow');
     expect(document.documentElement.dataset.contrast).toBe('high');
     expect(document.documentElement.dataset.motion).toBe('reduced');
+  });
+
+  it('updates map consumers when the resolved document theme changes', async () => {
+    document.documentElement.dataset.theme = 'alpine';
+    render(createElement(ThemeProbe));
+    expect(screen.getByLabelText('Resolved theme')).toHaveTextContent('alpine');
+
+    act(() => {
+      document.documentElement.dataset.theme = 'daylight';
+    });
+    await waitFor(() => expect(screen.getByLabelText('Resolved theme')).toHaveTextContent('daylight'));
   });
 });

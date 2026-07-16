@@ -1,4 +1,7 @@
-import { relationToMultiLineString } from './geometry.js';
+import { relationToMultiLineString, stitchLineSegments } from './geometry.js';
+
+const CA_STATE_PARKS_TRAIL_LAYER = 'https://services2.arcgis.com/AhxrK3F6WM8ECvDi/arcgis/rest/services/Click_able_Layers/FeatureServer/4/query';
+const PROVIDER_USER_AGENT = 'Odyssey/0.1 (+https://github.com/Shilpi924/Odyssey)';
 
 export async function fetchOsmRelationGeometry(relationId, fetchImpl = fetch) {
   if (!/^\d+$/.test(String(relationId))) throw new Error('Invalid OSM relation ID');
@@ -6,7 +9,7 @@ export async function fetchOsmRelationGeometry(relationId, fetchImpl = fetch) {
   const url = new URL('https://overpass-api.de/api/interpreter');
   url.searchParams.set('data', query);
   const response = await fetchImpl(url, {
-    headers: { Accept: 'application/json', 'User-Agent': 'Odyssey/0.1 (+https://github.com/Shilpi924/Odyssey)' },
+    headers: { Accept: 'application/json', 'User-Agent': PROVIDER_USER_AGENT },
     next: { revalidate: 86400 },
   });
   if (!response.ok) throw new Error(`OpenStreetMap geometry request failed (${response.status})`);
@@ -14,6 +17,46 @@ export async function fetchOsmRelationGeometry(relationId, fetchImpl = fetch) {
   const relation = data.elements?.find(element => element.type === 'relation');
   if (!relation) throw new Error('OpenStreetMap relation not found');
   return relationToMultiLineString(relation);
+}
+
+export async function fetchCaliforniaStateParksTrailGeometry(source, fetchImpl = fetch) {
+  const featureIds = source?.featureIds;
+  if (!Array.isArray(featureIds) || featureIds.length === 0 || featureIds.length > 25
+    || featureIds.some(id => !Number.isInteger(id) || id <= 0)) {
+    throw new Error('Invalid California State Parks feature IDs');
+  }
+  const url = new URL(CA_STATE_PARKS_TRAIL_LAYER);
+  url.searchParams.set('objectIds', featureIds.join(','));
+  url.searchParams.set('outFields', 'OBJECTID,Unit_Nbr,ROUTENAME,TRLDES,GlobalID');
+  url.searchParams.set('returnGeometry', 'true');
+  url.searchParams.set('outSR', '4326');
+  url.searchParams.set('f', 'geojson');
+  const response = await fetchImpl(url, {
+    headers: { Accept: 'application/geo+json, application/json', 'User-Agent': PROVIDER_USER_AGENT },
+    next: { revalidate: 86400 },
+  });
+  if (!response.ok) throw new Error(`California State Parks geometry request failed (${response.status})`);
+  const data = await response.json();
+  const features = (data.features || []).filter(feature => (
+    source.unitNumber == null || Number(feature.properties?.Unit_Nbr) === Number(source.unitNumber)
+  ));
+  const requestedFeatureIds = new Set(featureIds);
+  const returnedFeatureIds = features.map(feature => Number(feature.properties?.OBJECTID));
+  const returnedFeatureIdSet = new Set(returnedFeatureIds);
+  const hasExactFeatureCoverage = returnedFeatureIds.every(id => (
+    Number.isInteger(id) && requestedFeatureIds.has(id)
+  )) && requestedFeatureIds.size === returnedFeatureIdSet.size
+    && [...requestedFeatureIds].every(id => returnedFeatureIdSet.has(id));
+  if (!hasExactFeatureCoverage) {
+    throw new Error('California State Parks trail geometry is incomplete or unavailable for the requested features');
+  }
+  const lines = features.flatMap(feature => {
+    if (feature.geometry?.type === 'LineString') return [feature.geometry.coordinates];
+    if (feature.geometry?.type === 'MultiLineString') return feature.geometry.coordinates;
+    return [];
+  }).filter(line => line.length >= 2);
+  if (!lines.length) throw new Error('California State Parks trail geometry is unavailable');
+  return { type: 'MultiLineString', coordinates: stitchLineSegments(lines) };
 }
 
 export async function fetchNpsAlerts(parkCode, apiKey, fetchImpl = fetch) {

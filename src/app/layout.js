@@ -5,6 +5,7 @@ import BottomNavigation from "@/components/layout/BottomNavigation";
 import LegalFooter from "@/components/layout/LegalFooter";
 import { cookies } from "next/headers";
 import { parseDisplayPreferences, THEME_COOKIE } from "@/lib/theme";
+import { Suspense } from "react";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,7 +19,7 @@ const geistMono = Geist_Mono({
 
 export const metadata = {
   title: "Odyssey — Trail intelligence for every group",
-  description: "Sourced Yosemite trail discovery, saved trail facts, official alerts, and local GPS tracking.",
+  description: "Sourced Yosemite and Mount Diablo trail discovery, saved trail facts, official information, and local GPS tracking.",
   manifest: "/manifest.json",
 };
 
@@ -40,7 +41,9 @@ export default async function RootLayout({ children }) {
       <body className="min-h-full flex flex-col transition-colors duration-300">
         <AuthWrapper initialDisplay={initialDisplay}>{children}</AuthWrapper>
         <LegalFooter />
-        <BottomNavigation />
+        <Suspense fallback={null}>
+          <BottomNavigation />
+        </Suspense>
       </body>
     </html>
   );

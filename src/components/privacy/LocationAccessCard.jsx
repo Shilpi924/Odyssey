@@ -1,6 +1,6 @@
 export default function LocationAccessCard({
   title = 'Use your location?',
-  description = 'Odyssey uses your current position for nearby results. GPS trail history is recorded only after you start a hike and stays on this device.',
+  description = 'Odyssey uses an approximately 100-meter version of your current position to find nearby community-mapped trails. GPS trail history is recorded only after you start a hike and stays on this device.',
   allowLabel = 'Allow location',
   onAllow,
   alternativeLabel,

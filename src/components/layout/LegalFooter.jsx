@@ -1,4 +1,7 @@
+'use client';
+
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 const links = [
   ['/legal/terms', 'Terms'],
@@ -9,8 +12,11 @@ const links = [
 ];
 
 export default function LegalFooter() {
+  const pathname = usePathname();
+  if (pathname === '/search') return null;
+
   return (
-    <footer className="relative z-30 border-t border-white/10 bg-slate-950 px-5 py-8 pb-28 text-slate-400 md:pb-8">
+    <footer className="relative z-30 border-t border-white/10 bg-slate-950 px-5 py-8 pb-[var(--mobile-nav-clearance)] text-slate-400 md:pb-8">
       <div className="mx-auto flex max-w-7xl flex-col gap-4 text-xs sm:flex-row sm:items-center sm:justify-between">
         <p><span className="font-semibold text-amber-200">Testing build.</span> © 2026 Shilpi Sharma. Not emergency navigation; verify official conditions before every hike.</p>
         <nav aria-label="Legal" className="flex flex-wrap gap-x-4 gap-y-2">

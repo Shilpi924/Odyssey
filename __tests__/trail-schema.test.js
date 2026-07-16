@@ -71,6 +71,16 @@ describe('canonical trail schema', () => {
     expect(result.errors).toContain('difficulty must use a canonical value');
     expect(result.errors).toContain('trailhead.lat must be between -90 and 90');
   });
+
+  it('allows sourced catalog records to leave difficulty unknown', () => {
+    const result = validateTrail({
+      id: 'unknown-difficulty', slug: 'unknown-difficulty', name: 'Unknown Difficulty Trail',
+      trailhead: { lat: 37.8, lng: -121.9 }, difficulty: null,
+      source: { provider: 'ca-state-parks' },
+    });
+    expect(result.valid).toBe(true);
+    expect(result.trail.difficulty).toBeNull();
+  });
 });
 
 describe('search quality contract', () => {

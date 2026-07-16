@@ -31,6 +31,18 @@ describe('trail geometry API', () => {
     expect(data.source).toMatchObject({ provider: 'osm', relationId: 16315186 });
   });
 
+  it('returns California State Parks geometry for Mount Diablo', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ features: [{
+      properties: { OBJECTID: 3217, Unit_Nbr: 203, ROUTENAME: 'Mary Bowerman Trl' },
+      geometry: { type: 'LineString', coordinates: [[-121.917, 37.881], [-121.915, 37.883]] },
+    }] }) }));
+    const response = await getGeometry(new Request('http://localhost/api/trails/mount-diablo-mary-bowerman-trail/geometry'), { params: Promise.resolve({ id: 'mount-diablo-mary-bowerman-trail' }) });
+    const data = await response.json();
+    expect(response.status).toBe(200);
+    expect(data.distanceMiles).toBeGreaterThan(0);
+    expect(data.source).toMatchObject({ provider: 'ca-state-parks-arcgis', featureIds: [3217] });
+  });
+
   it('returns 502 when the geometry provider is unavailable', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503 }));
     const response = await getGeometry(new Request('http://localhost/api/trails/half-dome-jmt/geometry'), { params: Promise.resolve({ id: 'half-dome-jmt' }) });

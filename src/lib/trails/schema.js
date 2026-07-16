@@ -8,7 +8,7 @@ export const TRAIL_ACTIVITIES = Object.freeze([
   'Horseback riding', 'Snowshoeing', 'Cross-country skiing', 'Climbing',
 ]);
 
-const REQUIRED_FIELDS = ['id', 'name', 'slug', 'trailhead', 'difficulty', 'source'];
+const REQUIRED_FIELDS = ['id', 'name', 'slug', 'trailhead', 'source'];
 
 function finiteNumber(value) {
   const number = typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
@@ -101,7 +101,7 @@ export function validateTrail(input) {
     const value = field === 'source' ? trail.source.provider : trail[field];
     if (!value) errors.push(`${field} is required`);
   }
-  if (!TRAIL_DIFFICULTIES.includes(trail.difficulty)) errors.push('difficulty must use a canonical value');
+  if (trail.difficulty != null && !TRAIL_DIFFICULTIES.includes(trail.difficulty)) errors.push('difficulty must use a canonical value');
   if (trail.route.type && !TRAIL_ROUTE_TYPES.includes(trail.route.type)) errors.push('route.type must use a canonical value');
   if (!TRAIL_STATUSES.includes(trail.access.status)) errors.push('access.status must use a canonical value');
   if (trail.trailhead.lat == null || trail.trailhead.lat < -90 || trail.trailhead.lat > 90) errors.push('trailhead.lat must be between -90 and 90');

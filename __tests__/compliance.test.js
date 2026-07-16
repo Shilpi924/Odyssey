@@ -30,7 +30,11 @@ describe('provider and licensing guardrails', () => {
 
   it('uses the hosted Stadia style without a public OSM tile fallback', () => {
     expect(MAP_CONFIG).toMatchObject({ provider: 'stadia', providerName: 'Stadia Maps' });
-    expect(MAP_CONFIG.styleUrl).toBe('https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json');
+    expect(MAP_CONFIG.styleUrls).toEqual({
+      light: 'https://tiles.stadiamaps.com/styles/alidade_smooth.json',
+      dark: 'https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json',
+    });
+    expect(MAP_CONFIG.styleUrl).toBe(MAP_CONFIG.styleUrls.dark);
     const worker = readFileSync(join(root, 'src/app/sw.js'), 'utf8');
     expect(worker).not.toContain('tile.openstreetmap.org');
     expect(worker).toContain("url.hostname.endsWith('.stadiamaps.com')");
@@ -85,5 +89,17 @@ describe('provider and licensing guardrails', () => {
     expect(chatRoute).toContain('Never claim personal experience or current local knowledge');
     expect(chatRoute).not.toContain('advice from experience');
     expect(searchPage).not.toContain('I know ${trail.name} well');
+  });
+
+  it('uses the pinned low-latency Claude model for every Anthropic route', () => {
+    const modelConfig = readFileSync(join(root, 'src/lib/anthropic-model.js'), 'utf8');
+    const routes = ['refine-hikes', 'trail-chat'].map((route) =>
+      readFileSync(join(root, `src/app/api/${route}/route.js`), 'utf8')
+    );
+    expect(modelConfig).toContain("claude-haiku-4-5-20251001");
+    for (const route of routes) {
+      expect(route).toContain('model: CLAUDE_MODEL');
+      expect(route).not.toContain('claude-opus');
+    }
   });
 });

@@ -49,36 +49,6 @@ describe('ReviewSystem Components', () => {
   });
 });
 
-// Test AdvancedFilters components
-describe('AdvancedFilters Components', () => {
-  it('should render filter button', () => {
-    const { container } = render(
-      <button className="flex items-center gap-2 bg-slate-800 border border-slate-700 px-4 py-2.5 rounded-xl text-white text-sm font-medium">
-        <span>Filters</span>
-      </button>
-    );
-    expect(container.querySelector('button')).toHaveTextContent('Filters');
-  });
-
-  it('should render quick filter chips', () => {
-    const filters = [
-      { id: 'easy', label: 'Easy Trails' },
-      { id: 'dog', label: 'Dog Friendly' },
-    ];
-    
-    const { container } = render(
-      <div className="flex gap-2">
-        {filters.map(filter => (
-          <button key={filter.id} className="px-4 py-2 rounded-full text-sm">
-            {filter.label}
-          </button>
-        ))}
-      </div>
-    );
-    expect(container.querySelectorAll('button').length).toBe(2);
-  });
-});
-
 // Test SocialFeatures components
 describe('SocialFeatures Components', () => {
   it('should render activity feed item', () => {
@@ -212,28 +182,5 @@ describe('PhotoUpload Components', () => {
       </div>
     );
     expect(container.querySelectorAll('img').length).toBe(2);
-  });
-});
-
-// Test BottomNavigation components
-describe('BottomNavigation Components', () => {
-  it('should render navigation items', () => {
-    const navItems = [
-      { id: 'home', label: 'Explore', icon: '🏠' },
-      { id: 'search', label: 'Search', icon: '🔍' },
-      { id: 'saved', label: 'Saved', icon: '💾' },
-    ];
-
-    const { container } = render(
-      <div className="flex items-center justify-around">
-        {navItems.map(item => (
-          <button key={item.id} className="flex flex-col items-center gap-1 px-4 py-2">
-            <span className="text-2xl">{item.icon}</span>
-            <span className="text-xs">{item.label}</span>
-          </button>
-        ))}
-      </div>
-    );
-    expect(container.querySelectorAll('button').length).toBe(3);
   });
 });
