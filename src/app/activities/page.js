@@ -10,6 +10,7 @@ import { activitySyncPayload, activityToGpx, formatDistance, formatDuration, for
 import { db } from '@/lib/db';
 import { getMapStyle } from '@/lib/map-style';
 import useResolvedTheme from '@/hooks/useResolvedTheme';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
 function ActivityMetric({ label, value, tone = 'text-[var(--app-text)]' }) {
   return (
@@ -70,6 +71,7 @@ export default function ActivitiesPage() {
   const [offline, setOffline] = useState(false);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(null);
+  const [deleteActivity, setDeleteActivity] = useState(null);
 
   const load = useCallback(async () => {
     const records = await db.completedActivities.orderBy('completedAt').reverse().toArray();
@@ -145,14 +147,25 @@ export default function ActivitiesPage() {
   };
 
   const remove = async activity => {
-    if (!window.confirm(`Delete “${activity.title}” from this device?`)) return;
+    setBusy(activity.id);
     await db.completedActivities.delete(activity.id);
     if (activity.syncedAt && session?.user) await fetch(`/api/activities?id=${encodeURIComponent(activity.id)}`, { method: 'DELETE' }).catch(() => {});
+    setDeleteActivity(null);
+    setBusy(null);
     await load();
   };
 
   return (
     <main className="min-h-screen bg-[var(--app-bg)] pb-24 text-[var(--app-text)] md:pb-12">
+      <ConfirmDialog
+        open={Boolean(deleteActivity)}
+        title="Delete this activity?"
+        description={deleteActivity ? `“${deleteActivity.title}” will be removed from this device${deleteActivity.syncedAt ? ' and your Odyssey backup' : ''}. This cannot be undone.` : ''}
+        confirmLabel="Delete activity"
+        busy={Boolean(deleteActivity && busy === deleteActivity.id)}
+        onCancel={() => setDeleteActivity(null)}
+        onConfirm={() => remove(deleteActivity)}
+      />
       <header className="border-b border-[var(--app-border)] bg-[var(--app-bg)]/90 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-8">
           <div><p className="text-[10px] font-bold uppercase tracking-[.22em] text-[var(--app-primary)]">Odyssey Activity</p><h1 className="mt-1 text-lg font-bold">Your outdoor story</h1></div>
@@ -203,7 +216,7 @@ export default function ActivitiesPage() {
                     <label className="flex items-center gap-3 rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)] px-4 py-3 text-sm"><input type="checkbox" checked={selected.hideStartEnd !== false} onChange={event => updateActivity(selected.id, { hideStartEnd: event.target.checked, syncedAt: null })} className="h-4 w-4 accent-emerald-400" /><span><strong className="block">Protect start and finish</strong><small className="text-[var(--app-muted)]">Trim endpoints from cloud backup</small></span></label>
                   </div>
 
-                  <div className="mt-6 flex flex-wrap gap-2"><button type="button" onClick={() => downloadGpx(selected)} className="rounded-xl border border-[var(--app-border)] px-4 py-2.5 text-sm font-bold hover:border-[var(--app-primary)]">Export GPX</button><button type="button" disabled={busy === selected.id || offline} onClick={() => sync(selected)} className="rounded-xl bg-[var(--app-primary)] px-4 py-2.5 text-sm font-bold text-[var(--app-bg)] disabled:opacity-40">{busy === selected.id ? 'Backing up…' : selected.syncedAt ? 'Back up changes' : 'Back up activity'}</button><button type="button" onClick={() => remove(selected)} className="ml-auto rounded-xl px-4 py-2.5 text-sm font-semibold text-rose-300 hover:bg-rose-500/10">Delete</button></div>
+                  <div className="mt-6 flex flex-wrap gap-2"><button type="button" onClick={() => downloadGpx(selected)} className="rounded-xl border border-[var(--app-border)] px-4 py-2.5 text-sm font-bold hover:border-[var(--app-primary)]">Export GPX</button><button type="button" disabled={busy === selected.id || offline} onClick={() => sync(selected)} className="rounded-xl bg-[var(--app-primary)] px-4 py-2.5 text-sm font-bold text-[var(--app-bg)] disabled:opacity-40">{busy === selected.id ? 'Backing up…' : selected.syncedAt ? 'Back up changes' : 'Back up activity'}</button><button type="button" onClick={() => setDeleteActivity(selected)} className="ml-auto rounded-xl px-4 py-2.5 text-sm font-semibold text-rose-300 hover:bg-rose-500/10">Delete</button></div>
                   <p className="mt-4 text-[11px] leading-relaxed text-[var(--app-muted)]">GPS data stays on this device unless you choose Back up activity. Public and follower discovery are not enabled yet.</p>
                 </div>
               </section>

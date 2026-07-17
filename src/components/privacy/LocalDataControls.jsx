@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { db } from '@/lib/db';
 import { THEME_COOKIE } from '@/lib/theme';
 import { forgetLocationAccess } from '@/lib/location-access';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import {
   ALL_ODYSSEY_LOCAL_KEYS,
   SEARCH_AND_PLAN_LOCAL_KEYS,
@@ -18,14 +19,21 @@ import {
 export default function LocalDataControls({ signedIn = false }) {
   const [busy, setBusy] = useState('');
   const [message, setMessage] = useState('');
+  const [pendingAction, setPendingAction] = useState(null);
 
-  const perform = async (name, confirmation, action, success) => {
-    if (!window.confirm(confirmation)) return;
+  const requestAction = (name, title, description, action, success) => {
+    setPendingAction({ name, title, description, action, success });
+  };
+
+  const perform = async () => {
+    if (!pendingAction) return;
+    const { name, action, success } = pendingAction;
     setBusy(name);
     setMessage('');
     try {
       await action();
       setMessage(success);
+      setPendingAction(null);
     } catch (error) {
       console.error('Failed to clear local Odyssey data:', error);
       setMessage('Some local data could not be cleared. Try again or clear this site’s browser data.');
@@ -34,8 +42,9 @@ export default function LocalDataControls({ signedIn = false }) {
     }
   };
 
-  const clearSearchAndPlanning = () => perform(
+  const clearSearchAndPlanning = () => requestAction(
     'search',
+    'Clear searches and plan?',
     'Clear search history, the saved plan, and cached search results from this browser?',
     async () => {
       clearStorageEntries(window.localStorage, SEARCH_AND_PLAN_LOCAL_KEYS);
@@ -44,15 +53,17 @@ export default function LocalDataControls({ signedIn = false }) {
     'Search, planning, and cached result data were cleared from this browser.'
   );
 
-  const clearSavedAndGps = () => perform(
+  const clearSavedAndGps = () => requestAction(
     'trails',
+    'Delete saved trails and GPS?',
     'Delete all saved trails, active and completed activities, and recorded GPS points from this browser? This cannot be undone.',
     () => clearTrailRecords(db),
     'Saved trails, completed activities, and on-device GPS records were deleted.'
   );
 
-  const clearAllLocalData = () => perform(
+  const clearAllLocalData = () => requestAction(
     'all',
+    'Clear all local Odyssey data?',
     'Delete all Odyssey activity data, preferences, cached results, and the in-app location choice from this browser? This cannot be undone.',
     async () => {
       await clearTrailRecords(db);
@@ -67,6 +78,15 @@ export default function LocalDataControls({ signedIn = false }) {
 
   return (
     <section className="mt-8 rounded-2xl border border-cyan-500/30 bg-cyan-950/20 p-6">
+      <ConfirmDialog
+        open={Boolean(pendingAction)}
+        title={pendingAction?.title || ''}
+        description={pendingAction?.description || ''}
+        confirmLabel={pendingAction?.name === 'search' ? 'Clear data' : 'Delete data'}
+        busy={Boolean(busy)}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={perform}
+      />
       <p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Privacy &amp; local data</p>
       <h2 className="mt-2 text-xl font-semibold text-white">Control what this browser keeps</h2>
       <p className="mt-2 text-sm leading-relaxed text-slate-400">These controls target Odyssey’s own browser records. They do not change browser-level location permission or delete unrelated website data.</p>

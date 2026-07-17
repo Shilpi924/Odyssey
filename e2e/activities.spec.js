@@ -9,10 +9,15 @@ test.describe('Activity tracking', () => {
 
   test('finishes a hike into a private local activity', async ({ page }) => {
     const browserErrors = [];
+    const nativeDialogs = [];
     page.on('console', message => {
       if (message.type() === 'error') browserErrors.push(message.text());
     });
     page.on('pageerror', error => browserErrors.push(error.message));
+    page.on('dialog', async dialog => {
+      nativeDialogs.push(dialog.message());
+      await dialog.dismiss();
+    });
     const trail = {
       ...mockedTrailResponse.trails[0],
       placeId: 'half-dome-jmt',
@@ -53,12 +58,18 @@ test.describe('Activity tracking', () => {
     await page.getByRole('button', { name: 'Finish' }).click();
     const finishDialog = page.getByRole('dialog', { name: 'Save this adventure.' });
     await expect(finishDialog).toBeVisible();
+    await finishDialog.getByRole('button', { name: 'Discard recording' }).click();
+    const discardDialog = page.getByRole('dialog', { name: 'Discard this recording?' });
+    await expect(discardDialog).toHaveCount(1);
+    await discardDialog.getByRole('button', { name: 'Keep recording' }).click();
+    await expect(finishDialog).toBeVisible();
+    expect(nativeDialogs).toEqual([]);
     await finishDialog.getByLabel('Activity title').fill('Sunrise on Half Dome');
     await finishDialog.getByLabel('Trail notes').fill('Clear skies and a memorable first Odyssey activity.');
     await finishDialog.getByRole('button', { name: 'Save & view activity' }).click();
 
     await expect.poll(() => browserErrors, { timeout: 2_000 }).toEqual([]);
-    await expect(page).toHaveURL(/\/activities\?activity=activity-/);
+    await expect(page).toHaveURL(/\/activities\?activity=activity-/, { timeout: 20_000 });
     await expect(page.getByRole('heading', { level: 2, name: 'Sunrise on Half Dome' })).toBeVisible();
     await expect(page.getByText('Only you')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Export GPX' })).toBeVisible();

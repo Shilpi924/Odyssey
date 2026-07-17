@@ -43,7 +43,8 @@ test.describe('Saved Hikes Page', () => {
     const card = page.getByRole('article', { name: 'Half Dome via the John Muir Trail' });
     await expect(card).toBeVisible({ timeout: 15_000 });
     await card.getByRole('button', { name: 'View details' }).click();
-    await card.getByRole('button', { name: 'Save trail' }).click();
+    await card.getByRole('button', { name: 'Download offline' }).click();
+    await expect(page.getByRole('status')).toContainText('facts and route are downloaded for offline use');
     await expect(card.getByRole('button', { name: 'Saved' })).toBeVisible();
 
     await page.goto('/saved');

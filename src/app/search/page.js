@@ -15,6 +15,7 @@ import QuickFilters from '@/components/ui/QuickFilters';
 import SearchHistory, { addToHistory } from '@/components/ui/SearchHistory';
 import LocationAccessCard from '@/components/privacy/LocationAccessCard';
 import TrailResultCard from '@/components/search/TrailResultCard';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import useLocationAccess from '@/hooks/useLocationAccess';
 import useResolvedTheme from '@/hooks/useResolvedTheme';
 
@@ -232,6 +233,7 @@ const startBackgroundAudio = () => {
 
 function SafetyPanel({ userLocation, onClose, isOffline }) {
   const [step, setStep] = useState('initial'); // 'initial' | 'danger' | 'safe'
+  const [shareMessage, setShareMessage] = useState('');
   
   const handleShareLocation = () => {
     const lat = userLocation?.lat?.toFixed(5) || 'Unknown';
@@ -245,10 +247,13 @@ function SafetyPanel({ userLocation, onClose, isOffline }) {
       navigator.share({
         title: 'My Hiking Coordinates',
         text: text,
-      }).catch(console.error);
+      }).then(() => setShareMessage('Location details shared.')).catch(error => {
+        if (error?.name !== 'AbortError') setShareMessage('Location details could not be shared. Copy the coordinates manually.');
+      });
     } else {
-      navigator.clipboard.writeText(text);
-      alert('Location copied to clipboard! You can paste it into SMS or an email.');
+      navigator.clipboard.writeText(text)
+        .then(() => setShareMessage('Location copied. Paste it into a text message or email.'))
+        .catch(() => setShareMessage('Could not copy automatically. Write down the coordinates shown above.'));
     }
   };
 
@@ -302,6 +307,7 @@ function SafetyPanel({ userLocation, onClose, isOffline }) {
           Last updated: {timeText} | Status: {isOffline ? 'Offline' : 'Connected'}
         </div>
       </div>
+      {shareMessage && <p role="status" className="rounded-xl border border-emerald-400/25 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-100">{shareMessage}</p>}
 
       {step === 'initial' && (
         <div className="flex flex-col gap-4">
@@ -471,6 +477,25 @@ function HikeSearchContent() {
     }
   };
 
+  const handleDownloadHike = async (trail) => {
+    try {
+      let route = routeGeometries[trail.placeId] || null;
+      if (!route && navigator.onLine) route = await fetchOfflineRoute(trail);
+      await db.savedHikes.put(createSavedHike(trail, route));
+      if (route) {
+        setRouteGeometries(previous => ({ ...previous, [trail.placeId]: route }));
+        setRouteGeometryStatus(previous => ({ ...previous, [trail.placeId]: 'loaded' }));
+      }
+      setSavedIds(previous => new Set(previous).add(`${trail.name}-${trail.lat}`));
+      setNotice(route
+        ? `${trail.name} facts and route are downloaded for offline use.`
+        : `${trail.name} facts are saved offline. A downloadable route line is not available from this source.`);
+    } catch (downloadError) {
+      console.error('Failed to download trail:', downloadError);
+      setNotice('This trail could not be downloaded. Check your connection and try again.');
+    }
+  };
+
   const cardRefs = useRef([]);
   const mapRef = useRef(null);
   const mapErrorReportedRef = useRef(false);
@@ -502,6 +527,9 @@ function HikeSearchContent() {
   const [showRecoveryModal, setShowRecoveryModal] = useState(false);
   const [pendingHike, setPendingHike] = useState(null);
   const [finishDialog, setFinishDialog] = useState(null);
+  const [distanceWarning, setDistanceWarning] = useState(null);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [notice, setNotice] = useState('');
   
   const audioRef = useRef(null);
   const hikeTimingsRef = useRef({ startedAt: 0, totalPausedMs: 0, pausedAt: 0 });
@@ -834,6 +862,33 @@ function HikeSearchContent() {
     return knownSearchDestination(place);
   }
 
+  const enableDistanceFromUser = async () => {
+    allowLocation();
+    try {
+      const position = await getLocation();
+      setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
+      setNotice('Distances now use your current location. Odyssey does not store a home address.');
+    } catch (locationError) {
+      if (locationError?.code === 1) forgetLocation();
+      setNotice('Current location is unavailable, so distance from you cannot be calculated.');
+    }
+  };
+
+  useEffect(() => {
+    if (!locationReady || !locationAllowed || userLocation || !navigator.geolocation) return;
+    let active = true;
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        if (active) setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
+      },
+      locationError => {
+        if (active && locationError?.code === 1) forgetLocation();
+      },
+      { timeout: 10000 }
+    );
+    return () => { active = false; };
+  }, [forgetLocation, locationAllowed, locationReady, userLocation]);
+
   const runSearch = useCallback(
     async (locationAuthorized = false, destinationOverride = null) => {
       setStatus('locating');
@@ -1091,21 +1146,20 @@ function HikeSearchContent() {
     return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
   };
 
-  const startHike = (trail, isRestored = false, isRestoredPaused = false, locationAuthorized = false) => {
+  const startHike = (trail, isRestored = false, isRestoredPaused = false, locationAuthorized = false, distanceAuthorized = false) => {
     if (!navigator.geolocation) {
-      window.alert('GPS is not available in this browser, so hike tracking cannot start.');
+      setNotice('GPS is not available in this browser, so hike tracking cannot start.');
       return;
     }
     if (!locationAllowed && !locationAuthorized) {
       setPendingHike({ trail, isRestored, isRestoredPaused });
       return;
     }
-    if (!isRestored && userLocation) {
+    if (!isRestored && userLocation && !distanceAuthorized) {
       const distance = calculateDistanceMiles(userLocation.lat, userLocation.lng, trail.lat, trail.lng);
       if (distance > 3.0) {
-        if (!window.confirm(`You are over 3 miles away from the trailhead (${distance.toFixed(1)} mi). Starting the hike now may result in inaccurate tracking. Are you sure you want to start?`)) {
-          return;
-        }
+        setDistanceWarning({ trail, isRestored, isRestoredPaused, locationAuthorized, distance });
+        return;
       }
     }
 
@@ -1400,11 +1454,12 @@ function HikeSearchContent() {
       router.push(`/activities?activity=${encodeURIComponent(activity.id)}`);
     } catch (error) {
       console.error('Failed to save completed activity:', error);
-      window.alert('Odyssey could not save this activity. Your active recording is still available.');
+      setNotice('Odyssey could not save this activity. Your active recording is still available.');
     }
   };
 
   const discardActiveHike = async () => {
+    setConfirmDiscard(false);
     setFinishDialog(null);
     await clearActiveHike();
   };
@@ -1483,7 +1538,7 @@ function HikeSearchContent() {
       }
     } catch (e) {
       console.error(e);
-      alert('Failed to load more results.');
+      setNotice('More trail results could not be loaded. Please try again.');
     } finally {
       setIsLoadingMore(false);
     }
@@ -1505,6 +1560,38 @@ function HikeSearchContent() {
 
   return (
     <div className="flex min-h-screen min-h-[100dvh] flex-col bg-[var(--app-bg)] pb-[var(--mobile-nav-clearance)] font-sans md:h-[100dvh] md:overflow-hidden md:pb-0">
+
+      <ConfirmDialog
+        open={Boolean(distanceWarning)}
+        title="Start away from the trailhead?"
+        description={distanceWarning ? `You appear to be ${distanceWarning.distance.toFixed(1)} miles from this trailhead. Starting now may make the activity distance inaccurate.` : ''}
+        confirmLabel="Start anyway"
+        cancelLabel="Go back"
+        tone="default"
+        onCancel={() => setDistanceWarning(null)}
+        onConfirm={() => {
+          const request = distanceWarning;
+          setDistanceWarning(null);
+          startHike(request.trail, request.isRestored, request.isRestoredPaused, request.locationAuthorized, true);
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirmDiscard}
+        title="Discard this recording?"
+        description="The recorded route and activity progress will be permanently removed from this device. This cannot be undone."
+        confirmLabel="Discard recording"
+        cancelLabel="Keep recording"
+        onCancel={() => setConfirmDiscard(false)}
+        onConfirm={discardActiveHike}
+      />
+
+      {notice && (
+        <div role="status" className="fixed right-4 top-4 z-[1250] flex max-w-sm items-start gap-3 rounded-2xl border border-amber-300/30 bg-slate-950/95 p-4 text-sm text-amber-100 shadow-2xl backdrop-blur">
+          <p className="leading-relaxed">{notice}</p>
+          <button type="button" aria-label="Dismiss message" onClick={() => setNotice('')} className="rounded-lg px-2 py-1 text-slate-400 hover:bg-white/10 hover:text-white">✕</button>
+        </div>
+      )}
 
       {pendingHike && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="hike-location-title">
@@ -1550,7 +1637,7 @@ function HikeSearchContent() {
               <label className="block text-xs font-bold uppercase tracking-wider text-[var(--app-muted)]">Trail notes<textarea value={finishDialog.notes} maxLength={2000} rows={3} onChange={event => setFinishDialog(current => ({ ...current, notes: event.target.value }))} placeholder="What stood out? Conditions, wildlife, or a moment to remember…" className="mt-2 w-full resize-none rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)] px-4 py-3 text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--app-muted)] focus:border-[var(--app-primary)]" /></label>
               <div className="rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)]/50 p-4"><p className="text-sm font-bold">🔒 Private by default</p><p className="mt-1 text-xs leading-relaxed text-[var(--app-muted)]">Sharing is off. You can change visibility and protect route endpoints from the activity page.</p></div>
               <div className="flex flex-col gap-2 sm:flex-row"><button type="button" disabled={!finishDialog.title.trim()} onClick={saveCompletedHike} className="flex-1 rounded-xl bg-[var(--app-primary)] px-5 py-3 font-bold text-[var(--app-bg)] disabled:opacity-40">Save &amp; view activity</button><button type="button" onClick={cancelFinishHike} className="rounded-xl border border-[var(--app-border)] px-4 py-3 text-sm font-semibold text-[var(--app-text)]">Continue hike</button></div>
-              <button type="button" onClick={() => { if (window.confirm('Discard this recording permanently?')) discardActiveHike(); }} className="w-full py-2 text-xs font-semibold text-rose-300">Discard recording</button>
+              <button type="button" onClick={() => setConfirmDiscard(true)} className="w-full py-2 text-xs font-semibold text-rose-300">Discard recording</button>
             </div>
           </div>
         </div>
@@ -1594,7 +1681,7 @@ function HikeSearchContent() {
                 <button 
                   onClick={() => {
                     setShowRecoveryModal(false);
-                    discardActiveHike();
+                    setConfirmDiscard(true);
                   }} 
                   className="w-full bg-rose-950/40 hover:bg-rose-900/60 border border-rose-900/30 text-rose-400 font-semibold py-2.5 rounded-2xl text-sm transition-colors"
                 >
@@ -1710,6 +1797,13 @@ function HikeSearchContent() {
                     </span>
                   </div>
                   {locationName && <p className="mt-1 truncate text-xs text-[var(--app-muted)]">Near {locationName}</p>}
+                  {userLocation ? (
+                    <p className="mt-1 text-[11px] text-emerald-300/80">⌖ “From you” is straight-line distance from your current location</p>
+                  ) : (
+                    <button type="button" onClick={enableDistanceFromUser} className="mt-1 text-left text-[11px] font-semibold text-sky-300 underline decoration-sky-300/40 underline-offset-2 hover:text-sky-200">
+                      Use current location to show distance from you
+                    </button>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -1756,7 +1850,11 @@ function HikeSearchContent() {
 
               {source === 'openstreetmap' && (
                 <p className="mt-3 text-xs leading-relaxed text-[var(--app-muted)]">
-                  Community-mapped results. Confirm access and conditions with the local land manager.
+                  Trail names and mapped locations come from{' '}
+                  <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="font-semibold text-sky-300 underline decoration-sky-300/40 underline-offset-2 hover:text-sky-200">
+                    OpenStreetMap contributors
+                  </a>
+                  . Community data may be incomplete or outdated—confirm access and conditions with the local land manager.
                 </p>
               )}
             </section>
@@ -1802,10 +1900,14 @@ function HikeSearchContent() {
                       onSelect={() => toggleTrailDetails(trailIndex)}
                       cardRef={(el) => (cardRefs.current[trailIndex] = el)}
                       onSave={() => handleSaveHike(trail)}
+                      onDownloadOffline={() => handleDownloadHike(trail)}
                       isSaved={savedIds.has(`${trail.name}-${trail.lat}`)}
                       onStartHike={() => startHike(trail)}
                       onViewMap={() => viewTrailOnMap(trailIndex)}
                       routeStatus={routeGeometryStatus[trail.placeId]}
+                      distanceFromUser={userLocation && Number.isFinite(trail.lat) && Number.isFinite(trail.lng)
+                        ? calculateDistanceMiles(userLocation.lat, userLocation.lng, trail.lat, trail.lng).toFixed(1)
+                        : null}
                     />
                   );
                 })

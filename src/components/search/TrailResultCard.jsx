@@ -38,15 +38,24 @@ export default function TrailResultCard({
   onSelect,
   cardRef,
   onSave,
+  onDownloadOffline,
   isSaved,
   onStartHike,
   onViewMap,
   routeStatus,
+  distanceFromUser,
 }) {
   const slug = String(trail.placeId || index).replace(/[^a-z0-9-]/gi, '-');
   const headingId = `trail-heading-${slug}`;
   const detailsId = `trail-details-${slug}`;
-  const sourceLabel = trail.sourceKind === 'community' ? 'Community' : 'Official';
+  const isCommunitySource = trail.sourceKind === 'community';
+  const sourceLabel = isCommunitySource ? 'OpenStreetMap' : 'Official';
+  const sourceName = isCommunitySource
+    ? 'OpenStreetMap contributors'
+    : String(trail.sourceAttribution || 'Official source').replace(/^Source:\s*/i, '');
+  const rating = Number(trail.rating);
+  const reviewCount = Number(trail.userRatingsTotal);
+  const hasVerifiedReviews = Number.isFinite(rating) && rating > 0 && Number.isFinite(reviewCount) && reviewCount > 0;
 
   return (
     <article
@@ -84,12 +93,27 @@ export default function TrailResultCard({
 
             {trail.vicinity && <p className="mt-1 truncate text-xs text-[var(--app-muted)]">{trail.vicinity}</p>}
 
+            <p className="mt-1.5 text-[11px] leading-relaxed text-[var(--app-muted)]">
+              Source:{' '}
+              {trail.sourceUrl ? (
+                <a href={trail.sourceUrl} target="_blank" rel="noreferrer" className="font-semibold text-sky-300 underline decoration-sky-300/40 underline-offset-2 hover:text-sky-200">
+                  {sourceName}
+                </a>
+              ) : (
+                <span className="font-semibold">{sourceName}</span>
+              )}
+              {isCommunitySource && ' · Community mapped'}
+            </p>
+
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs font-medium text-slate-300">
-              <Metric icon="🥾">{trail.length}</Metric>
+              <Metric icon="🥾">{trail.length ? `Trail ${trail.length}` : null}</Metric>
               <Metric icon="↗">{trail.elevationGain}</Metric>
-              {trail.distance && <Metric icon="⌖">{trail.distance} mi away</Metric>}
+              {distanceFromUser != null && <Metric icon="⌖">{distanceFromUser} mi from you · straight-line</Metric>}
               {trail.routeType && <span className="text-[var(--app-muted)]">{trail.routeType}</span>}
             </div>
+            <p className="mt-2 text-[11px] text-[var(--app-muted)]">
+              {hasVerifiedReviews ? `★ ${rating.toFixed(1)} · ${reviewCount.toLocaleString()} verified ${reviewCount === 1 ? 'review' : 'reviews'}` : 'No verified reviews available'}
+            </p>
           </div>
         </div>
 
@@ -150,6 +174,14 @@ export default function TrailResultCard({
               className="mt-2 min-h-10 w-full rounded-xl px-3 text-sm font-semibold text-[var(--app-muted)] hover:bg-[var(--app-raised)] hover:text-[var(--app-text)]"
             >
               <span aria-hidden="true">{isSaved ? '✓' : '🔖'}</span> {isSaved ? 'Saved' : 'Save trail'}
+            </button>
+
+            <button
+              type="button"
+              onClick={onDownloadOffline}
+              className="mt-2 min-h-11 w-full rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-3 text-sm font-bold text-emerald-200 hover:border-emerald-300/50 hover:bg-emerald-400/15"
+            >
+              <span aria-hidden="true">↓</span> Download offline
             </button>
 
             {trail.sourceKind !== 'community' && trail.placeId && (

@@ -84,10 +84,11 @@ test.describe('Personalization Flow', () => {
       localStorage.setItem('unrelated_test_key', 'keep');
       sessionStorage.setItem('odyssey_verified_search_cache_v1', JSON.stringify({ trails: [] }));
     });
-    page.on('dialog', dialog => dialog.accept());
-
     await page.goto('/personalize');
     await page.getByRole('button', { name: 'Clear searches & plan' }).click();
+    const confirmation = page.getByRole('dialog', { name: 'Clear searches and plan?' });
+    await expect(confirmation).toBeVisible();
+    await confirmation.getByRole('button', { name: 'Clear data' }).click();
     await expect(page.getByRole('status')).toContainText('Search, planning, and cached result data were cleared');
     let stored = await page.evaluate(() => ({
       history: localStorage.getItem('odyssey_search_history'),
@@ -98,6 +99,9 @@ test.describe('Personalization Flow', () => {
     expect(stored).toEqual({ history: null, plan: null, preferences: JSON.stringify({ interests: ['Hiking'] }), cache: null });
 
     await page.getByRole('button', { name: 'Clear all local data' }).click();
+    const clearAllConfirmation = page.getByRole('dialog', { name: 'Clear all local Odyssey data?' });
+    await expect(clearAllConfirmation).toBeVisible();
+    await clearAllConfirmation.getByRole('button', { name: 'Delete data' }).click();
     await expect(page.getByRole('status')).toContainText('All scoped Odyssey data stored by this browser was cleared');
     stored = await page.evaluate(() => ({
       preferences: localStorage.getItem('userPreferences'),
@@ -111,8 +115,6 @@ test.describe('Personalization Flow', () => {
     await page.route('**/api/fast-search', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(mockedTrailResponse) }));
     await page.route('https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(mockedStadiaStyle) }));
     await page.route('**/api/park-alerts?parkCode=yose', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ available: true, alerts: [] }) }));
-    page.on('dialog', dialog => dialog.accept());
-
     await page.goto('/search?q=Yosemite&difficulty=Strenuous', { waitUntil: 'domcontentloaded' });
     const trailHeading = page.getByRole('heading', { name: 'Half Dome via the John Muir Trail', level: 3 });
     await expect(trailHeading).toBeVisible({ timeout: 15_000 });
@@ -127,6 +129,9 @@ test.describe('Personalization Flow', () => {
 
     await page.goto('/personalize');
     await page.getByRole('button', { name: 'Delete saved trails & GPS' }).click();
+    const confirmation = page.getByRole('dialog', { name: 'Delete saved trails and GPS?' });
+    await expect(confirmation).toBeVisible();
+    await confirmation.getByRole('button', { name: 'Delete data' }).click();
     await expect(page.getByRole('status')).toContainText('Saved trails, completed activities, and on-device GPS records were deleted');
 
     await page.goto('/saved');
