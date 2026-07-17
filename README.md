@@ -8,8 +8,9 @@ Odyssey is an early-stage trail discovery and local GPS tool built around explic
 - National Park Service alerts and source links
 - Official California State Parks geometry for Mount Diablo and reviewed OpenStreetMap relation geometry for Yosemite
 - Interactive MapLibre map using a Stadia Maps vector basemap with visible attribution
-- Locally saved trail facts and on-device GPS recording
+- Locally saved trail facts and route lines, a connection-free route canvas, completed activity history, GPX export, and privacy-controlled GPS recording
 - Optional authenticated preference storage
+- Explicit, optional account backup for completed activities
 - Optional Anthropic-powered questions and refinement over the supplied trail set
 
 The app intentionally returns a coverage message outside its verified catalog. It does not currently claim offline basemap downloads, live weather, crowds, pollen, air quality, community reviews, or arbitrary global trail coverage.
@@ -41,6 +42,10 @@ NPS_API_KEY=your_nps_api_key
 ```
 
 Optional account, database, and AI variables are documented in `.env.example`. Secret values must remain server-only and `.env.local` must never be committed.
+
+The optional grounded Trail Guide can retrieve official park guidance through a
+private CPU embedding service and PostgreSQL with `pgvector`. Setup, ingestion,
+and operational controls are documented in [`docs/rag-architecture.md`](docs/rag-architecture.md).
 
 Destination lookup and community trail discovery default to the public Nominatim and Overpass endpoints for low-volume, user-triggered beta use. Responses are cached, nearby coordinates are rounded to roughly 100-meter precision, and both endpoints can be replaced through `NOMINATIM_BASE_URL` and `OVERPASS_BASE_URL`. Use self-hosted or appropriately contracted providers before traffic exceeds the public-service policies.
 

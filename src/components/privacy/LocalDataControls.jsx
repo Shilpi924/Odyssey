@@ -46,9 +46,9 @@ export default function LocalDataControls({ signedIn = false }) {
 
   const clearSavedAndGps = () => perform(
     'trails',
-    'Delete all saved trails, active hikes, and recorded GPS points from this browser? This cannot be undone.',
+    'Delete all saved trails, active and completed activities, and recorded GPS points from this browser? This cannot be undone.',
     () => clearTrailRecords(db),
-    'Saved trails and on-device GPS records were deleted.'
+    'Saved trails, completed activities, and on-device GPS records were deleted.'
   );
 
   const clearAllLocalData = () => perform(

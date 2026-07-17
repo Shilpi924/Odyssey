@@ -5,6 +5,17 @@ export const DEFAULT_STADIA_DARK_STYLE_URL = 'https://tiles.stadiamaps.com/style
 // Kept as a compatibility alias for callers that expect the original dark default.
 export const DEFAULT_STADIA_STYLE_URL = DEFAULT_STADIA_DARK_STYLE_URL;
 
+export const OFFLINE_MAP_STYLE = Object.freeze({
+  version: 8,
+  name: 'Odyssey offline route canvas',
+  sources: {},
+  layers: [{
+    id: 'offline-background',
+    type: 'background',
+    paint: { 'background-color': '#0f172a' },
+  }],
+});
+
 export function resolveMapStyleUrl(value, fallback = DEFAULT_STADIA_DARK_STYLE_URL) {
   const candidate = String(value || '').trim() || fallback;
   let url;
@@ -40,4 +51,8 @@ export const MAP_CONFIG = Object.freeze({
 
 export function getMapStyleUrl(resolvedTheme) {
   return isDarkTheme(resolvedTheme) ? MAP_CONFIG.styleUrls.dark : MAP_CONFIG.styleUrls.light;
+}
+
+export function getMapStyle(resolvedTheme, offline = false) {
+  return offline ? OFFLINE_MAP_STYLE : getMapStyleUrl(resolvedTheme);
 }

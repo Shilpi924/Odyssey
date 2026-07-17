@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 const NAV_ITEMS = [
   { id: 'home', label: 'Discover', icon: '🧭', href: '/' },
   { id: 'map', label: 'Map', icon: '🗺️', href: '/search' },
+  { id: 'activities', label: 'Activity', icon: '🥾', href: '/activities' },
   { id: 'saved', label: 'Saved', icon: '💾', href: '/saved' },
   { id: 'personalize', label: 'Profile', icon: '👤', href: '/personalize' },
 ];
@@ -33,7 +34,7 @@ export default function BottomNavigation() {
   return (
     <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-50 md:hidden">
       <div className="border-t border-[var(--app-border)] bg-[var(--app-bg)]/95 px-4 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur-xl">
-        <div className="grid grid-cols-4 gap-1">
+        <div className="grid grid-cols-5 gap-1">
           {NAV_ITEMS.map(item => {
             const isActive = activeTab === item.id;
             return (

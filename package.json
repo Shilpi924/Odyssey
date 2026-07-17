@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "licenses": "node scripts/generate-third-party-notices.mjs",
-    "licenses:check": "node scripts/generate-third-party-notices.mjs --check"
+    "licenses:check": "node scripts/generate-third-party-notices.mjs --check",
+    "rag:ingest": "node scripts/rag-ingest.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",

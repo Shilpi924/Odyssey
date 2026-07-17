@@ -1,5 +1,7 @@
 'use client';
 
+import TrailGuidePanel from './TrailGuidePanel';
+
 const FEATURE_ICONS = {
   Shaded: '🌳', Sunny: '☀️', Water: '💧', Summit: '🏔️',
   DogFriendly: '🐾', Loop: '🔄', Scenic: '📸', EasyParking: '🚗',
@@ -149,6 +151,10 @@ export default function TrailResultCard({
             >
               <span aria-hidden="true">{isSaved ? '✓' : '🔖'}</span> {isSaved ? 'Saved' : 'Save trail'}
             </button>
+
+            {trail.sourceKind !== 'community' && trail.placeId && (
+              <TrailGuidePanel trailId={trail.placeId} trailName={trail.name} />
+            )}
 
             {(trail.sourceAttribution || trail.sourceUrl || trail.geometrySource || trail.access) && (
               <details className="mt-3 rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)]/40 px-3 py-2" onClick={event => event.stopPropagation()}>

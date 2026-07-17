@@ -2,6 +2,9 @@
 
 # dependencies
 /node_modules
+/services/rag-embedder/.venv
+__pycache__/
+*.py[cod]
 /.pnp
 .pnp.*
 .yarn/*

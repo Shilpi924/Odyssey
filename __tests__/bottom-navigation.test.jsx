@@ -24,11 +24,12 @@ afterEach(() => {
 });
 
 describe('BottomNavigation', () => {
-  it('shows four clear destinations and keeps tracking trail-specific', () => {
+  it('shows five clear destinations and keeps tracking trail-specific', () => {
     render(<BottomNavigation />);
 
     const nav = screen.getByRole('navigation', { name: 'Primary' });
-    expect(nav.querySelectorAll('button')).toHaveLength(4);
+    expect(nav.querySelectorAll('button')).toHaveLength(5);
+    expect(screen.getByRole('button', { name: 'Activity' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Discover' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('button', { name: 'Map' })).not.toHaveAttribute('aria-current');
     expect(screen.queryByRole('button', { name: 'Track' })).not.toBeInTheDocument();

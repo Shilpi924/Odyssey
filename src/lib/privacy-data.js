@@ -26,6 +26,7 @@ export async function clearTrailRecords(database) {
     database.savedHikes.clear(),
     database.activeHikes.clear(),
     database.activeHikePoints.clear(),
+    database.completedActivities?.clear?.(),
   ]);
 }
 

@@ -10,3 +10,12 @@ db.version(2).stores({
   activeHikes: 'id, status, startedAt, pausedAt, totalPausedMs, distanceMeters, elevationGainMeters',
   activeHikePoints: '++pointId, hikeId, timestamp, accepted'
 });
+
+// Version 3: Completed activities are durable, device-local records. Optional
+// account sync is explicit and never required for GPS recording.
+db.version(3).stores({
+  savedHikes: '++id, name, lat, lng, [name+lat]',
+  activeHikes: 'id, status, startedAt, pausedAt, totalPausedMs, distanceMeters, elevationGainMeters',
+  activeHikePoints: '++pointId, hikeId, timestamp, accepted',
+  completedActivities: 'id, completedAt, startedAt, trailId, visibility, syncedAt',
+});

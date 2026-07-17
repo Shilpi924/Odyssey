@@ -3,14 +3,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { db } from '@/lib/db';
-import { getMapStyleUrl } from '@/lib/map-style';
+import { getMapStyle } from '@/lib/map-style';
 import LocationAccessCard from '@/components/privacy/LocationAccessCard';
 import useLocationAccess from '@/hooks/useLocationAccess';
 import useResolvedTheme from '@/hooks/useResolvedTheme';
 import Map, { AttributionControl, Marker, Source, Layer } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import maplibregl from 'maplibre-gl';
-import { motion } from 'framer-motion';
 
 const getPinColor = (index) => {
   const colors = [
@@ -65,7 +64,7 @@ export default function SavedHikesPage() {
   const [savedHikes, setSavedHikes] = useState([]);
   const [userLoc, setUserLoc] = useState(null);
   const [quota, setQuota] = useState(null);
-  const [activeTab, setActiveTab] = useState('saved'); // 'saved' | 'completed' | 'planned'
+  const [isOffline, setIsOffline] = useState(false);
 
   const [selectedIdx, setSelectedIdx] = useState(null);
   const [mapCenter, setMapCenter] = useState(null);
@@ -86,6 +85,18 @@ export default function SavedHikesPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadQuota();
+  }, []);
+
+  useEffect(() => {
+    setIsOffline(!navigator.onLine); // eslint-disable-line react-hooks/set-state-in-effect
+    const offline = () => setIsOffline(true);
+    const online = () => setIsOffline(false);
+    window.addEventListener('offline', offline);
+    window.addEventListener('online', online);
+    return () => {
+      window.removeEventListener('offline', offline);
+      window.removeEventListener('online', online);
+    };
   }, []);
 
   useEffect(() => {
@@ -175,22 +186,9 @@ export default function SavedHikesPage() {
         {/* Left Side: Hikes List */}
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-6 md:w-1/2">
           
-          {/* Tabs */}
-          <div className="flex gap-2 bg-slate-800 p-1 rounded-xl shrink-0">
-            {['saved', 'completed', 'planned'].map(tab => (
-              <motion.button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                whileTap={{ scale: 0.95 }}
-                className={`flex-1 py-2 px-4 rounded-lg text-xs font-medium transition-all ${
-                  activeTab === tab
-                    ? 'bg-indigo-600 text-white shadow-lg'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                {tab === 'saved' ? '💾 Saved' : tab === 'completed' ? '✅ Completed' : '📅 Planned'}
-              </motion.button>
-            ))}
+          <div className="flex gap-2 rounded-xl bg-slate-800 p-1 text-xs font-semibold">
+            <span className="flex-1 rounded-lg bg-indigo-600 px-4 py-2 text-center text-white shadow-lg">💾 Saved</span>
+            <Link href="/activities" className="flex-1 rounded-lg px-4 py-2 text-center text-slate-400 hover:bg-slate-700 hover:text-white">🥾 Activities</Link>
           </div>
 
           {/* Stats */}
@@ -278,6 +276,9 @@ export default function SavedHikesPage() {
                     <p className="text-[10px] text-slate-500 mt-2">
                       Saved on {new Date(hike.savedAt).toLocaleDateString()}
                     </p>
+                    <p className={`text-[10px] font-semibold ${hike.route ? 'text-emerald-400' : 'text-amber-300'}`}>
+                      {hike.route ? 'Offline route ready' : 'Offline route unavailable'}
+                    </p>
                   </div>
                 </div>
               ))}
@@ -296,7 +297,7 @@ export default function SavedHikesPage() {
                 latitude: mapCenter?.lat || 37.7749,
                 zoom: mapZoom
               }}
-              mapStyle={getMapStyleUrl(resolvedTheme)}
+              mapStyle={getMapStyle(resolvedTheme, isOffline)}
               attributionControl={false}
               style={{ width: '100%', height: '100%' }}
               onZoom={(e) => setMapZoom(e.viewState.zoom)}
@@ -306,7 +307,7 @@ export default function SavedHikesPage() {
                 setMapError(true);
               }}
             >
-              <AttributionControl compact={false} position="bottom-right" />
+              {!isOffline && <AttributionControl compact={false} position="bottom-right" />}
               {userLoc && <UserPin position={userLoc} />}
 
               {savedHikes.map((hike, idx) =>
@@ -351,6 +352,11 @@ export default function SavedHikesPage() {
                 <button onClick={fitAllHikes} title="Show all saved hikes" className="w-10 h-10 bg-slate-900/90 backdrop-blur border border-slate-600 rounded-xl text-white text-base flex items-center justify-center shadow-lg hover:bg-slate-700 transition-colors">🔭</button>
               </div>
             </Map>
+            {isOffline && (
+              <div role="status" className="absolute left-4 top-4 z-40 rounded-xl border border-emerald-400/30 bg-slate-950/95 px-3 py-2 text-xs text-emerald-200 shadow-xl">
+                Offline route canvas — basemap details are unavailable.
+              </div>
+            )}
             {mapError && (
               <div role="status" className="absolute inset-x-4 top-4 z-40 rounded-xl border border-amber-400/40 bg-slate-950/95 p-4 text-sm text-amber-100 shadow-xl">
                 <p className="font-semibold">Basemap temporarily unavailable</p>

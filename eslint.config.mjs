@@ -9,6 +9,7 @@ const eslintConfig = defineConfig([
     ".next/**",
     "out/**",
     "build/**",
+    "services/rag-embedder/.venv/**",
     "next-env.d.ts",
   ]),
 ]);

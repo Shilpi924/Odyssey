@@ -127,7 +127,7 @@ test.describe('Personalization Flow', () => {
 
     await page.goto('/personalize');
     await page.getByRole('button', { name: 'Delete saved trails & GPS' }).click();
-    await expect(page.getByRole('status')).toContainText('Saved trails and on-device GPS records were deleted');
+    await expect(page.getByRole('status')).toContainText('Saved trails, completed activities, and on-device GPS records were deleted');
 
     await page.goto('/saved');
     await expect(page.getByText('No saved hikes')).toBeVisible();

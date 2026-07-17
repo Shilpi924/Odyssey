@@ -1,0 +1,17 @@
+[
+  {
+    "url": "https://www.nps.gov/yose/planyourvisit/valleyhikes.htm",
+    "provider": "U.S. National Park Service",
+    "parkId": "nps-yose"
+  },
+  {
+    "url": "https://www.nps.gov/yose/planyourvisit/yosemite-valley-trails.htm",
+    "provider": "U.S. National Park Service",
+    "parkId": "nps-yose"
+  },
+  {
+    "url": "https://www.parks.ca.gov/?page_id=517",
+    "provider": "California State Parks",
+    "parkId": "ca-sp-mount-diablo"
+  }
+]

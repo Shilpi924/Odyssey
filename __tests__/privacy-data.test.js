@@ -16,11 +16,13 @@ describe('scoped privacy controls', () => {
       savedHikes: { clear: vi.fn().mockResolvedValue(undefined) },
       activeHikes: { clear: vi.fn().mockResolvedValue(undefined) },
       activeHikePoints: { clear: vi.fn().mockResolvedValue(undefined) },
+      completedActivities: { clear: vi.fn().mockResolvedValue(undefined) },
     };
     await clearTrailRecords(database);
     expect(database.savedHikes.clear).toHaveBeenCalledOnce();
     expect(database.activeHikes.clear).toHaveBeenCalledOnce();
     expect(database.activeHikePoints.clear).toHaveBeenCalledOnce();
+    expect(database.completedActivities.clear).toHaveBeenCalledOnce();
   });
 
   it('deletes each cache owned by the current origin', async () => {

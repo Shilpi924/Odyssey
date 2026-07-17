@@ -1,13 +1,15 @@
 'use client';
 
 import { useState, useEffect, useRef, Suspense, useCallback, useMemo } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Map, { AttributionControl, Marker, Popup, Source, Layer } from 'react-map-gl/maplibre';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { db } from '@/lib/db';
-import { getMapStyleUrl } from '@/lib/map-style';
+import { createCompletedActivity } from '@/lib/activities';
+import { createSavedHike, fetchOfflineRoute, isRouteGeometry } from '@/lib/offline-trails';
+import { getMapStyle } from '@/lib/map-style';
 import TrailCardSkeleton from '@/components/ui/TrailCardSkeleton';
 import QuickFilters from '@/components/ui/QuickFilters';
 import SearchHistory, { addToHistory } from '@/components/ui/SearchHistory';
@@ -394,6 +396,7 @@ function SafetyPanel({ userLocation, onClose, isOffline }) {
 // ─── Main search content ───────────────────────────────────────────────────────
 
 function HikeSearchContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const query = searchParams.get('q');
   const mobileView = searchParams.get('view') === 'map' ? 'map' : 'results';
@@ -454,11 +457,13 @@ function HikeSearchContent() {
         await db.savedHikes.where('id').equals(id).delete();
         setSavedIds(prev => { const n = new Set(prev); n.delete(id); return n; });
       } else {
-        await db.savedHikes.put({
-          id,
-          ...trail,
-          savedAt: Date.now()
-        });
+        let route = routeGeometries[trail.placeId] || null;
+        if (!route && navigator.onLine) route = await fetchOfflineRoute(trail);
+        await db.savedHikes.put(createSavedHike(trail, route));
+        if (route) {
+          setRouteGeometries(previous => ({ ...previous, [trail.placeId]: route }));
+          setRouteGeometryStatus(previous => ({ ...previous, [trail.placeId]: 'loaded' }));
+        }
         setSavedIds(prev => new Set(prev).add(id));
       }
     } catch (err) {
@@ -496,6 +501,7 @@ function HikeSearchContent() {
   const [recoveredHike, setRecoveredHike] = useState(null);
   const [showRecoveryModal, setShowRecoveryModal] = useState(false);
   const [pendingHike, setPendingHike] = useState(null);
+  const [finishDialog, setFinishDialog] = useState(null);
   
   const audioRef = useRef(null);
   const hikeTimingsRef = useRef({ startedAt: 0, totalPausedMs: 0, pausedAt: 0 });
@@ -573,6 +579,10 @@ function HikeSearchContent() {
       try {
         const activeRecord = await db.activeHikes.where('status').equals('active').first();
         if (activeRecord) {
+          if (activeRecord.trail?.placeId && isRouteGeometry(activeRecord.route)) {
+            setRouteGeometries(previous => ({ ...previous, [activeRecord.trail.placeId]: activeRecord.route }));
+            setRouteGeometryStatus(previous => ({ ...previous, [activeRecord.trail.placeId]: 'loaded' }));
+          }
           // Load route points from IndexedDB
           const points = await db.activeHikePoints
             .where('hikeId')
@@ -624,7 +634,9 @@ function HikeSearchContent() {
             pausedAt: hikeTimingsRef.current.pausedAt,
             totalPausedMs: hikeTimingsRef.current.totalPausedMs,
             distanceMeters: hikeDistance * 1609.344, // miles to meters
-            elevationGainMeters: hikeElevationGain / 3.28084 // feet to meters
+            elevationGainMeters: hikeElevationGain / 3.28084, // feet to meters
+            trail: activeHike,
+            route: routeGeometries[activeHike.placeId] || recoveredHike.route || null,
           });
         } catch (err) {
           console.error('Failed to save active hike metadata:', err);
@@ -632,7 +644,7 @@ function HikeSearchContent() {
       };
       saveMetadata();
     }
-  }, [isHiking, activeHike, recoveredHike, hikeDistance, hikeElevationGain]);
+  }, [isHiking, activeHike, recoveredHike, hikeDistance, hikeElevationGain, routeGeometries]);
 
   // ── Sync Map Rotation Mode with DOM dataset to prevent orientation stale closures
   useEffect(() => {
@@ -1114,12 +1126,23 @@ function HikeSearchContent() {
         pausedAt: null,
         totalPausedMs: 0,
         distanceMeters: 0,
-        elevationGainMeters: 0
+        elevationGainMeters: 0,
+        trail,
+        route: routeGeometries[trail.placeId] || null,
       };
       
       // Save pointers in state & DB
       db.activeHikes.put(record).catch(err => console.error('DB put failed:', err));
       setRecoveredHike(record);
+
+      if (!record.route && navigator.onLine) {
+        fetchOfflineRoute(trail).then(route => {
+          if (!route) return;
+          setRouteGeometries(previous => ({ ...previous, [trail.placeId]: route }));
+          setRouteGeometryStatus(previous => ({ ...previous, [trail.placeId]: 'loaded' }));
+          db.activeHikes.update(newHikeId, { route }).catch(err => console.error('Failed to save offline route:', err));
+        }).catch(err => console.error('Failed to prepare offline route:', err));
+      }
 
       hikeTimingsRef.current = { startedAt: now, totalPausedMs: 0, pausedAt: null };
       setHikeDistance(0);
@@ -1192,7 +1215,8 @@ function HikeSearchContent() {
           // 5. Stationary Check
           // Restricting stationary drift checks to frequent updates (elapsedSeconds < 20)
           // so resume jumps are not misclassified as standing still.
-          const likelyStationary = distanceMoved < movementThreshold &&
+          const likelyStationary = Boolean(lastLocRef.current) &&
+            distanceMoved < movementThreshold &&
             elapsedSeconds < 20 &&
             (speed == null || speed < 0.15);
 
@@ -1301,7 +1325,7 @@ function HikeSearchContent() {
     }
   };
 
-  const stopHike = async () => {
+  const clearActiveHike = async () => {
     setIsHiking(false);
     setIsPaused(false);
 
@@ -1334,6 +1358,55 @@ function HikeSearchContent() {
       try { audioRef.current.pause(); } catch {}
       audioRef.current = null;
     }
+  };
+
+  const beginFinishHike = () => {
+    const wasPaused = isPaused;
+    if (!wasPaused) togglePause();
+    setFinishDialog({
+      title: activeHike?.name || 'Outdoor activity',
+      notes: '',
+      visibility: 'private',
+      wasPaused,
+    });
+  };
+
+  const cancelFinishHike = () => {
+    const shouldResume = finishDialog && !finishDialog.wasPaused;
+    setFinishDialog(null);
+    if (shouldResume) togglePause();
+  };
+
+  const saveCompletedHike = async () => {
+    if (!activeHike || !recoveredHike || !finishDialog) return;
+    try {
+      const points = await db.activeHikePoints.where('hikeId').equals(recoveredHike.id).toArray();
+      const activity = createCompletedActivity({
+        id: recoveredHike.id.replace(/^hike-/, 'activity-'),
+        trail: activeHike,
+        startedAt: hikeTimingsRef.current.startedAt || recoveredHike.startedAt,
+        completedAt: Date.now(),
+        durationSeconds: hikeDuration,
+        distanceMeters: hikeDistance * 1609.344,
+        elevationGainMeters: hikeElevationGain / 3.28084,
+        points,
+        title: finishDialog.title,
+        notes: finishDialog.notes,
+        visibility: finishDialog.visibility,
+      });
+      await db.completedActivities.put(activity);
+      setFinishDialog(null);
+      await clearActiveHike();
+      router.push(`/activities?activity=${encodeURIComponent(activity.id)}`);
+    } catch (error) {
+      console.error('Failed to save completed activity:', error);
+      window.alert('Odyssey could not save this activity. Your active recording is still available.');
+    }
+  };
+
+  const discardActiveHike = async () => {
+    setFinishDialog(null);
+    await clearActiveHike();
   };
 
   const togglePause = () => {
@@ -1459,6 +1532,30 @@ function HikeSearchContent() {
         </div>
       )}
 
+      {finishDialog && activeHike && (
+        <div className="fixed inset-0 z-[1001] grid place-items-center bg-slate-950/85 p-4 backdrop-blur-md" role="dialog" aria-modal="true" aria-labelledby="finish-hike-title">
+          <div className="w-full max-w-lg overflow-hidden rounded-[2rem] border border-emerald-300/25 bg-[var(--app-surface)] shadow-2xl">
+            <div className="bg-[linear-gradient(135deg,color-mix(in_srgb,var(--app-primary)_22%,var(--app-surface)),var(--app-surface))] p-6 sm:p-8">
+              <p className="text-xs font-bold uppercase tracking-[.2em] text-[var(--app-accent)]">Activity complete</p>
+              <h2 id="finish-hike-title" className="mt-3 text-3xl font-semibold tracking-tight text-[var(--app-text)]">Save this adventure.</h2>
+              <p className="mt-2 text-sm text-[var(--app-muted)]">Your route stays on this device unless you explicitly back it up later.</p>
+              <div className="mt-6 grid grid-cols-3 gap-2">
+                <div className="rounded-xl bg-black/15 p-3 text-center"><strong className="block text-xl">{hikeDistance.toFixed(2)}</strong><span className="text-[10px] uppercase text-[var(--app-muted)]">Miles</span></div>
+                <div className="rounded-xl bg-black/15 p-3 text-center"><strong className="block text-xl">{Math.floor(hikeDuration / 60)}m</strong><span className="text-[10px] uppercase text-[var(--app-muted)]">Time</span></div>
+                <div className="rounded-xl bg-black/15 p-3 text-center"><strong className="block text-xl">{Math.round(hikeElevationGain)}</strong><span className="text-[10px] uppercase text-[var(--app-muted)]">Feet gained</span></div>
+              </div>
+            </div>
+            <div className="space-y-4 p-6 sm:p-8">
+              <label className="block text-xs font-bold uppercase tracking-wider text-[var(--app-muted)]">Activity title<input value={finishDialog.title} maxLength={100} onChange={event => setFinishDialog(current => ({ ...current, title: event.target.value }))} className="mt-2 w-full rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)] px-4 py-3 text-base font-semibold text-[var(--app-text)] outline-none focus:border-[var(--app-primary)]" /></label>
+              <label className="block text-xs font-bold uppercase tracking-wider text-[var(--app-muted)]">Trail notes<textarea value={finishDialog.notes} maxLength={2000} rows={3} onChange={event => setFinishDialog(current => ({ ...current, notes: event.target.value }))} placeholder="What stood out? Conditions, wildlife, or a moment to remember…" className="mt-2 w-full resize-none rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)] px-4 py-3 text-sm text-[var(--app-text)] outline-none placeholder:text-[var(--app-muted)] focus:border-[var(--app-primary)]" /></label>
+              <div className="rounded-xl border border-[var(--app-border)] bg-[var(--app-bg)]/50 p-4"><p className="text-sm font-bold">🔒 Private by default</p><p className="mt-1 text-xs leading-relaxed text-[var(--app-muted)]">Sharing is off. You can change visibility and protect route endpoints from the activity page.</p></div>
+              <div className="flex flex-col gap-2 sm:flex-row"><button type="button" disabled={!finishDialog.title.trim()} onClick={saveCompletedHike} className="flex-1 rounded-xl bg-[var(--app-primary)] px-5 py-3 font-bold text-[var(--app-bg)] disabled:opacity-40">Save &amp; view activity</button><button type="button" onClick={cancelFinishHike} className="rounded-xl border border-[var(--app-border)] px-4 py-3 text-sm font-semibold text-[var(--app-text)]">Continue hike</button></div>
+              <button type="button" onClick={() => { if (window.confirm('Discard this recording permanently?')) discardActiveHike(); }} className="w-full py-2 text-xs font-semibold text-rose-300">Discard recording</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Active Hike Recovery Modal ── */}
       {showRecoveryModal && recoveredHike && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[999] flex items-center justify-center p-4">
@@ -1478,7 +1575,7 @@ function HikeSearchContent() {
               <button 
                 onClick={() => {
                   setShowRecoveryModal(false);
-                  startHike(recoveredHike, true, false); // Resume active
+                  startHike(recoveredHike.trail || recoveredHike, true, false); // Resume active
                 }} 
                 className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-2xl transition-colors"
               >
@@ -1487,7 +1584,7 @@ function HikeSearchContent() {
               <button 
                 onClick={() => {
                   setShowRecoveryModal(false);
-                  startHike(recoveredHike, true, true); // Keep paused
+                  startHike(recoveredHike.trail || recoveredHike, true, true); // Keep paused
                 }} 
                 className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-2.5 rounded-2xl transition-colors"
               >
@@ -1495,27 +1592,11 @@ function HikeSearchContent() {
               </button>
               <div className="flex gap-2">
                 <button 
-                  onClick={async () => {
-                    setShowRecoveryModal(false);
-                    // End and save
-                    await db.savedHikes.put({
-                      name: recoveredHike.name,
-                      lat: recoveredHike.lat || 0,
-                      lng: recoveredHike.lng || 0,
-                      savedAt: Date.now()
-                    });
-                    stopHike();
-                  }} 
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 rounded-2xl text-sm transition-colors"
-                >
-                  Save Hike
-                </button>
-                <button 
                   onClick={() => {
                     setShowRecoveryModal(false);
-                    stopHike(); // Discards and deletes active tables records
+                    discardActiveHike();
                   }} 
-                  className="flex-1 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-900/30 text-rose-400 font-semibold py-2.5 rounded-2xl text-sm transition-colors"
+                  className="w-full bg-rose-950/40 hover:bg-rose-900/60 border border-rose-900/30 text-rose-400 font-semibold py-2.5 rounded-2xl text-sm transition-colors"
                 >
                   Discard
                 </button>
@@ -1854,7 +1935,7 @@ function HikeSearchContent() {
                 pitch: 0,
                 bearing: 0
               }}
-              mapStyle={getMapStyleUrl(resolvedTheme)}
+              mapStyle={getMapStyle(resolvedTheme, isOffline)}
               attributionControl={false}
               style={{ width: '100%', height: '100%' }}
               minZoom={4}
@@ -2049,10 +2130,10 @@ function HikeSearchContent() {
                   {isPaused ? '▶ Resume' : '⏸ Pause'}
                 </button>
                 <button 
-                  onClick={stopHike} 
+                  onClick={beginFinishHike}
                   className="flex-1 bg-rose-600 hover:bg-rose-500 text-white text-sm font-bold py-2 rounded-xl transition-colors"
                 >
-                  Stop Hike
+                  Finish
                 </button>
               </div>
             </div>
