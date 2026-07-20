@@ -1,78 +1,125 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Logo from '@/components/Logo';
-import { allowLocationAccess, forgetLocationAccess } from '@/lib/location-access';
 
-const steps = ['Location', 'Your group', 'Trail fit', 'Review'];
 const groups = ['Solo', 'Partner', 'Friends', 'Family with children', 'Older adults', 'Dog'];
 const difficulties = ['Easy', 'Moderate', 'Strenuous', 'Any'];
 const distances = ['Under 3 miles', '3–5 miles', '5–10 miles', 'Any distance'];
 const needs = ['Shade preferred', 'Frequent rest stops', 'Paved or firm surface', 'Avoid steep inclines', 'Accessible restroom', 'Dog-friendly'];
+const initialForm = { destination: '', days: 1, startDate: '', group: [], difficulty: 'Any', distance: 'Any distance', needs: [], notes: '' };
 
 function Choice({ active, children, onClick }) {
-  return <button type="button" onClick={onClick} className={`rounded-xl border px-4 py-3 text-left text-sm transition-all ${active ? 'border-emerald-300 bg-emerald-300/15 text-emerald-100' : 'border-white/10 bg-white/[.035] text-stone-300 hover:border-white/25'}`}>{children}</button>;
+  return <button type="button" aria-pressed={active} onClick={onClick} className={`rounded-full border px-4 py-2 text-sm transition ${active ? 'border-[var(--app-primary)] bg-[var(--app-glow)] text-[var(--app-primary)]' : 'border-[var(--app-border)] text-[var(--app-muted)] hover:border-white/30 hover:text-[var(--app-text)]'}`}>{children}</button>;
+}
+
+function formatPlanDownload(plan) {
+  const days = plan.days.map(day => `DAY ${day.day}: ${day.name}\n${day.area} · ${day.difficulty} · ${day.distance} · ${day.elevationGain} · ${day.routeType}\n${day.sourceProvider}: ${day.sourceUrl}`).join('\n\n');
+  return `${plan.title}\nCreated ${new Date(plan.createdAt).toLocaleString()}\n\n${plan.aiBrief?.text || plan.summary}\n\n${days}\n\nGEAR\n${plan.gear.map(item => `- ${item}`).join('\n')}\n\nSAFETY\n${plan.safety.map(item => `- ${item}`).join('\n')}\n\nVerify closures, weather, access, and permits before leaving.`;
 }
 
 export default function PlanPage() {
-  const router = useRouter();
-  const [step, setStep] = useState(0);
-  const [form, setForm] = useState({ location: '', group: [], difficulty: 'Easy', distance: 'Under 3 miles', needs: [] });
-  const [locating, setLocating] = useState(false);
-  const setOne = (key, value) => setForm((f) => ({ ...f, [key]: value }));
-  const toggle = (key, value) => setForm((f) => ({ ...f, [key]: f[key].includes(value) ? f[key].filter((v) => v !== value) : [...f[key], value] }));
-  const canContinue = step !== 0 || form.location.trim().length > 1;
-  const searchUrl = useMemo(() => {
-    const params = new URLSearchParams({ q: form.location, plan: 'true', difficulty: form.difficulty, distance: form.distance, group: form.group.join(', '), accessibility: form.needs.join(', ') });
-    return `/search?${params.toString()}`;
-  }, [form]);
+  const [form, setForm] = useState(initialForm);
+  const [plan, setPlan] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+  const setOne = (key, value) => setForm(current => ({ ...current, [key]: value }));
+  const toggle = (key, value) => setForm(current => ({ ...current, [key]: current[key].includes(value) ? current[key].filter(item => item !== value) : [...current[key], value] }));
 
-  const finish = () => {
-    localStorage.setItem('odysseyHikePlan', JSON.stringify({ ...form, createdAt: new Date().toISOString() }));
-    router.push(searchUrl);
-  };
+  useEffect(() => {
+    let timer;
+    try {
+      const draft = JSON.parse(localStorage.getItem('odysseyTripPlanDraft'));
+      if (draft?.request) timer = window.setTimeout(() => setForm({ ...initialForm, ...draft.request }), 0);
+    } catch { /* Ignore invalid device-local drafts. */ }
+    return () => window.clearTimeout(timer);
+  }, []);
 
-  const useCurrentLocation = () => {
-    if (!navigator.geolocation) return;
-    allowLocationAccess();
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(() => {
-      setOne('location', 'near me');
-      setLocating(false);
-    }, (error) => {
-      if (error.code === 1) forgetLocationAccess();
-      setLocating(false);
-    }, { enableHighAccuracy: true, timeout: 10000 });
-  };
+  async function generate(event) {
+    event.preventDefault();
+    setLoading(true);
+    setMessage('Matching your preferences with sourced trail facts…');
+    setPlan(null);
+    try {
+      const response = await fetch('/api/trip-plan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not build this trip.');
+      setPlan(data.plan);
+      localStorage.setItem('odysseyTripPlanDraft', JSON.stringify(data.plan));
+      setMessage('Plan saved on this device. Review its sources before heading out.');
+      window.setTimeout(() => document.getElementById('trip-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function download() {
+    const blob = new Blob([formatPlanDownload(plan)], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${plan.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.txt`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setMessage('Plan downloaded. Map tiles and live conditions are not included.');
+  }
 
   return (
-    <main className="min-h-screen bg-[var(--app-bg)] text-[var(--app-text)] pb-24 transition-colors duration-300">
-      <header className="max-w-5xl mx-auto px-5 sm:px-8 py-5 flex items-center justify-between border-b border-white/10">
-        <Link href="/" className="flex items-center gap-3"><Logo size={38} /><span className="font-bold tracking-[.14em] text-sm">ODYSSEY</span></Link>
-        <Link href="/" className="text-sm text-stone-400 hover:text-white">Save & exit</Link>
+    <main className="min-h-screen bg-[var(--app-bg)] text-[var(--app-text)] pb-24">
+      <header className="mx-auto flex max-w-7xl items-center justify-between border-b border-[var(--app-border)] px-5 py-5 sm:px-8">
+        <Link href="/" className="flex items-center gap-3"><Logo size={38} /><span className="text-sm font-bold tracking-[.14em]">ODYSSEY</span></Link>
+        <Link href="/search" className="text-sm text-[var(--app-muted)] hover:text-[var(--app-text)]">Explore trails</Link>
       </header>
 
-      <div className="max-w-5xl mx-auto px-5 sm:px-8 pt-10 sm:pt-16">
-        <div className="mb-10">
-          <p className="text-xs uppercase tracking-[.2em] text-[var(--app-primary)]">Plan a hike</p>
-          <div className="mt-5 grid grid-cols-4 gap-2" aria-label={`Step ${step + 1} of ${steps.length}`}>
-            {steps.map((label, i) => <div key={label}><div className={`h-1 rounded-full ${i <= step ? 'bg-emerald-300' : 'bg-white/10'}`} /><p className={`mt-2 text-[10px] sm:text-xs ${i === step ? 'text-white' : 'text-stone-600'}`}>{label}</p></div>)}
+      <div className="mx-auto max-w-7xl px-5 pt-10 sm:px-8 sm:pt-16">
+        <div className="grid items-end gap-8 lg:grid-cols-[1fr_.72fr]">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--app-border)] bg-[var(--app-surface)] px-3 py-1.5 text-xs text-[var(--app-primary)]"><span aria-hidden="true">✦</span> Source-grounded trip planner</div>
+            <h1 className="mt-6 max-w-4xl text-4xl font-semibold leading-[1.04] tracking-[-.04em] sm:text-6xl">A trail plan that explains <span className="text-[var(--app-primary)]">why it fits.</span></h1>
+            <p className="mt-5 max-w-2xl text-base leading-7 text-[var(--app-muted)] sm:text-lg">Tell Odyssey what your group needs. It builds a practical itinerary from sourced trail facts—and clearly marks what still needs checking.</p>
           </div>
+          <div className="rounded-2xl border border-amber-300/20 bg-amber-300/[.06] p-5 text-sm leading-6 text-amber-100/85"><strong className="text-amber-100">Plan, then verify.</strong> Closures, weather, fire restrictions, permits, and access can change. Follow the linked land-manager sources before every trip.</div>
         </div>
 
-        <section className="rounded-3xl border border-[var(--app-border)] bg-[var(--app-surface)] p-6 sm:p-10 shadow-2xl min-h-[440px] transition-colors">
-          {step === 0 && <div className="max-w-2xl"><p className="text-sm text-[#d9a14a]">Step 1 of 4</p><h1 className="mt-2 text-3xl sm:text-4xl font-semibold tracking-tight">Where do you want to hike?</h1><p className="mt-3 text-stone-400">Try a park or city, such as Mount Diablo or Yosemite, or use your location to find nearby trails.</p><label className="block mt-9 text-sm font-semibold" htmlFor="location">Destination</label><div className="mt-2 flex rounded-xl border border-white/15 bg-black/20 p-2 focus-within:border-emerald-300"><span className="px-3 py-2 text-emerald-300">⌖</span><input id="location" autoFocus value={form.location} onChange={(e) => setOne('location', e.target.value)} onKeyDown={(e) => e.key === 'Enter' && canContinue && setStep(1)} placeholder={locating ? 'Finding your location…' : 'Try Mount Diablo or Yosemite'} disabled={locating} className="w-full bg-transparent px-1 text-lg outline-none placeholder:text-stone-600 disabled:opacity-70" /></div><button type="button" onClick={useCurrentLocation} disabled={locating} className="mt-4 text-sm font-semibold text-emerald-300 hover:text-emerald-200 disabled:opacity-60">⌖ {locating ? 'Finding location…' : 'Use my current location'}</button><p className="mt-2 text-xs leading-relaxed text-stone-500">Choosing this asks your browser for location and remembers the in-app choice. Nearby search uses reduced coordinate precision; GPS trail history is recorded only after you start a hike and stays on this device.</p></div>}
+        <div className="mt-10 grid gap-8 lg:grid-cols-[.86fr_1.14fr]">
+          <form onSubmit={generate} className="h-fit rounded-3xl border border-[var(--app-border)] bg-[var(--app-surface)] p-5 shadow-2xl sm:p-8 lg:sticky lg:top-6">
+            <div className="flex items-center justify-between"><div><p className="text-xs uppercase tracking-[.18em] text-[var(--app-primary)]">Your trip</p><h2 className="mt-2 text-2xl font-semibold">Set the trail brief</h2></div><span className="rounded-full bg-black/20 px-3 py-1 text-xs text-[var(--app-muted)]">1–7 days</span></div>
+            <label htmlFor="destination" className="mt-7 block text-sm font-semibold">Where do you want to go?</label>
+            <input id="destination" required minLength={2} value={form.destination} onChange={event => setOne('destination', event.target.value)} placeholder="Mount Diablo, Yosemite, or a nearby city" className="mt-2 w-full rounded-xl border border-[var(--app-border)] bg-black/20 px-4 py-3.5 outline-none placeholder:text-stone-600 focus:border-[var(--app-primary)]" />
+            <div className="mt-5 grid grid-cols-2 gap-3"><label className="text-sm font-semibold">Days<input type="number" min="1" max="7" value={form.days} onChange={event => setOne('days', Number(event.target.value))} className="mt-2 w-full rounded-xl border border-[var(--app-border)] bg-black/20 px-4 py-3 outline-none focus:border-[var(--app-primary)]" /></label><label className="text-sm font-semibold">Start date <span className="font-normal text-[var(--app-muted)]">optional</span><input type="date" value={form.startDate} onChange={event => setOne('startDate', event.target.value)} className="mt-2 w-full rounded-xl border border-[var(--app-border)] bg-black/20 px-4 py-3 outline-none focus:border-[var(--app-primary)]" /></label></div>
 
-          {step === 1 && <div><p className="text-sm text-[#d9a14a]">Step 2 of 4</p><h1 className="mt-2 text-3xl sm:text-4xl font-semibold tracking-tight">Who’s coming along?</h1><p className="mt-3 text-stone-400">Choose all that apply. Group details are saved as planning context; Odyssey does not infer suitability from missing trail facts.</p><div className="mt-8 grid sm:grid-cols-2 md:grid-cols-3 gap-3">{groups.map((x) => <Choice key={x} active={form.group.includes(x)} onClick={() => toggle('group', x)}>{x}</Choice>)}</div><label className="block mt-8 text-sm text-stone-400">Group notes (optional)</label><input className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 outline-none focus:border-emerald-300" placeholder="e.g. One child and one older adult" /></div>}
+            <fieldset className="mt-6"><legend className="text-sm font-semibold">Who’s coming?</legend><div className="mt-3 flex flex-wrap gap-2">{groups.map(item => <Choice key={item} active={form.group.includes(item)} onClick={() => toggle('group', item)}>{item}</Choice>)}</div></fieldset>
+            <fieldset className="mt-6"><legend className="text-sm font-semibold">Difficulty</legend><div className="mt-3 flex flex-wrap gap-2">{difficulties.map(item => <Choice key={item} active={form.difficulty === item} onClick={() => setOne('difficulty', item)}>{item}</Choice>)}</div></fieldset>
+            <fieldset className="mt-6"><legend className="text-sm font-semibold">Distance</legend><div className="mt-3 flex flex-wrap gap-2">{distances.map(item => <Choice key={item} active={form.distance === item} onClick={() => setOne('distance', item)}>{item}</Choice>)}</div></fieldset>
+            <fieldset className="mt-6"><legend className="text-sm font-semibold">Must-haves</legend><div className="mt-3 flex flex-wrap gap-2">{needs.map(item => <Choice key={item} active={form.needs.includes(item)} onClick={() => toggle('needs', item)}>{item}</Choice>)}</div></fieldset>
+            <label htmlFor="notes" className="mt-6 block text-sm font-semibold">Anything else? <span className="font-normal text-[var(--app-muted)]">optional</span></label>
+            <textarea id="notes" maxLength={500} rows={3} value={form.notes} onChange={event => setOne('notes', event.target.value)} placeholder="Slow mornings, scenic lunch stop, first hike after an injury…" className="mt-2 w-full resize-none rounded-xl border border-[var(--app-border)] bg-black/20 px-4 py-3 outline-none placeholder:text-stone-600 focus:border-[var(--app-primary)]" />
+            <button disabled={loading} className="mt-6 w-full rounded-xl bg-[var(--app-accent)] px-5 py-4 font-bold text-[#122019] shadow-lg transition hover:brightness-105 disabled:cursor-wait disabled:opacity-60">{loading ? 'Building your plan…' : '✦ Build my trip'}</button>
+            <p role="status" aria-live="polite" className={`mt-3 min-h-5 text-center text-xs ${message && !plan && !loading ? 'text-amber-200' : 'text-[var(--app-muted)]'}`}>{message}</p>
+          </form>
 
-          {step === 2 && <div><p className="text-sm text-[#d9a14a]">Step 3 of 4</p><h1 className="mt-2 text-3xl sm:text-4xl font-semibold tracking-tight">What feels right today?</h1><div className="mt-8 grid md:grid-cols-2 gap-8"><div><p className="mb-3 text-xs uppercase tracking-widest text-stone-500">Difficulty</p><div className="grid grid-cols-2 gap-2">{difficulties.map((x) => <Choice key={x} active={form.difficulty === x} onClick={() => setOne('difficulty', x)}>{x}</Choice>)}</div></div><div><p className="mb-3 text-xs uppercase tracking-widest text-stone-500">Distance</p><div className="grid grid-cols-2 gap-2">{distances.map((x) => <Choice key={x} active={form.distance === x} onClick={() => setOne('distance', x)}>{x}</Choice>)}</div></div></div><p className="mt-8 mb-3 text-xs uppercase tracking-widest text-stone-500">Trail needs</p><div className="grid sm:grid-cols-2 md:grid-cols-3 gap-2">{needs.map((x) => <Choice key={x} active={form.needs.includes(x)} onClick={() => toggle('needs', x)}>{x}</Choice>)}</div></div>}
+          <section id="trip-result" aria-live="polite" className="min-h-[620px] scroll-mt-6">
+            {!plan && <div className="flex min-h-[620px] flex-col items-center justify-center rounded-3xl border border-dashed border-[var(--app-border)] bg-[linear-gradient(145deg,var(--app-surface),transparent)] p-8 text-center"><div className="grid h-16 w-16 place-items-center rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] text-2xl">⌁</div><h2 className="mt-5 text-2xl font-semibold">Your route story starts here</h2><p className="mt-3 max-w-sm text-sm leading-6 text-[var(--app-muted)]">You’ll get day-by-day trail matches, time estimates, a gear checklist, safety reminders, and direct source links.</p><div className="mt-7 flex flex-wrap justify-center gap-2 text-xs text-[var(--app-muted)]"><span className="rounded-full border border-[var(--app-border)] px-3 py-1.5">No invented reviews</span><span className="rounded-full border border-[var(--app-border)] px-3 py-1.5">Missing facts stay visible</span><span className="rounded-full border border-[var(--app-border)] px-3 py-1.5">Works without an AI key</span></div></div>}
+            {plan && <div className="space-y-5">
+              <div className="rounded-3xl border border-[var(--app-border)] bg-[var(--app-surface)] p-6 sm:p-8">
+                <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs uppercase tracking-[.18em] text-[var(--app-primary)]">{plan.grounding === 'verified-catalog' ? 'Verified catalog plan' : 'Community-mapped plan'}</p><h2 className="mt-2 text-3xl font-semibold tracking-tight">{plan.title}</h2></div><div className="flex gap-2"><button type="button" onClick={download} className="rounded-xl border border-[var(--app-border)] px-4 py-2.5 text-sm font-semibold hover:bg-white/5">↓ Download</button><Link href={`/search?q=${encodeURIComponent(plan.request.destination)}&plan=true`} className="rounded-xl bg-[var(--app-primary)] px-4 py-2.5 text-sm font-bold text-[#09221d]">Open map</Link></div></div>
+                <p className="mt-5 whitespace-pre-line text-base leading-7 text-[var(--app-muted)]">{plan.aiBrief?.text || plan.summary}</p>
+                <div className="mt-5 flex items-center gap-2 text-xs text-[var(--app-muted)]"><span className={`h-2 w-2 rounded-full ${plan.aiBrief ? 'bg-emerald-300' : 'bg-amber-300'}`} /><span>{plan.aiBrief ? 'AI briefing checked against cited sources' : 'Deterministic plan — AI briefing not configured'}</span></div>
+              </div>
 
-          {step === 3 && <div><p className="text-sm text-[#d9a14a]">Step 4 of 4</p><h1 className="mt-2 text-3xl sm:text-4xl font-semibold tracking-tight">Ready to find your trail.</h1><p className="mt-3 text-stone-400">Odyssey will use your choices where the trail source provides matching facts. Missing details stay clearly marked instead of being guessed.</p><dl className="mt-8 divide-y divide-white/10 border-y border-white/10">{[['Location', form.location], ['Group', form.group.join(', ') || 'Not specified'], ['Trail fit', `${form.difficulty} · ${form.distance}`], ['Needs', form.needs.join(', ') || 'None specified']].map(([k,v]) => <div key={k} className="grid grid-cols-[100px_1fr] gap-5 py-4"><dt className="text-sm text-stone-500">{k}</dt><dd className="text-sm font-medium">{v}</dd></div>)}</dl><div className="mt-7 rounded-xl border border-amber-300/20 bg-amber-300/5 p-4 text-sm leading-relaxed text-amber-100/80"><strong className="text-amber-100">Conditions may have changed.</strong> Verify closures, weather, and official trail notices before starting.</div></div>}
-        </section>
+              {plan.days.map(day => <article key={day.day} className="rounded-3xl border border-[var(--app-border)] bg-[var(--app-surface)] p-6 sm:p-7"><div className="flex gap-4"><div className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[var(--app-primary)] font-bold text-[#09221d]">{day.day}</div><div className="min-w-0 flex-1"><p className="text-xs uppercase tracking-wider text-[var(--app-muted)]">Day {day.day} · {day.area}</p><h3 className="mt-1 text-2xl font-semibold">{day.name}</h3>{day.matchReasons?.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{day.matchReasons.map(reason => <span key={reason} className="rounded-full bg-[var(--app-glow)] px-2.5 py-1 text-xs text-[var(--app-primary)]">✓ {reason}</span>)}</div>}<div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">{[['Difficulty', day.difficulty], ['Trail length', day.distance], ['Elevation', day.elevationGain], ['Time', day.estimatedMinutes ? `${Math.floor(day.estimatedMinutes / 60)}h ${day.estimatedMinutes % 60 || ''}m` : 'Unknown']].map(([label, value]) => <div key={label} className="rounded-xl bg-black/15 p-3"><p className="text-[10px] uppercase tracking-wider text-[var(--app-muted)]">{label}</p><p className="mt-1 text-sm font-semibold">{value}</p></div>)}</div><div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--app-border)] pt-4"><p className="text-xs text-[var(--app-muted)]">Access: {day.accessStatus}</p><a href={day.sourceUrl} target="_blank" rel="noreferrer" className="text-sm font-semibold text-[var(--app-primary)] hover:underline">{day.sourceProvider} ↗</a></div></div></div></article>)}
 
-        <div className="mt-6 flex items-center justify-between"><button type="button" onClick={() => setStep((s) => Math.max(0, s - 1))} className={`px-4 py-3 text-sm font-semibold ${step === 0 ? 'invisible' : 'text-stone-300'}`}>← Back</button>{step < 3 ? <button disabled={!canContinue} type="button" onClick={() => setStep((s) => s + 1)} className="rounded-xl bg-[var(--app-accent)] px-6 py-3 font-bold text-[#122019] disabled:cursor-not-allowed disabled:opacity-35">Continue →</button> : <button type="button" onClick={finish} className="rounded-xl bg-[var(--app-accent)] px-6 py-3 font-bold text-[#122019]">Analyze trails →</button>}</div>
+              <div className="grid gap-5 sm:grid-cols-2"><div className="rounded-3xl border border-[var(--app-border)] bg-[var(--app-surface)] p-6"><h3 className="text-lg font-semibold">Pack with purpose</h3><ul className="mt-4 space-y-3 text-sm text-[var(--app-muted)]">{plan.gear.map(item => <li key={item} className="flex gap-2"><span className="text-[var(--app-primary)]">✓</span>{item}</li>)}</ul></div><div className="rounded-3xl border border-[var(--app-border)] bg-[var(--app-surface)] p-6"><h3 className="text-lg font-semibold">Before you leave</h3><ul className="mt-4 space-y-3 text-sm text-[var(--app-muted)]">{plan.safety.map(item => <li key={item} className="flex gap-2"><span className="text-amber-300">!</span>{item}</li>)}</ul></div></div>
+
+              {(plan.unknowns.length > 0 || plan.coverageMessage) && <div className="rounded-2xl border border-amber-300/20 bg-amber-300/[.05] p-5"><h3 className="text-sm font-semibold text-amber-100">What Odyssey did not assume</h3><ul className="mt-2 space-y-1 text-sm leading-6 text-amber-100/70">{plan.unknowns.map(item => <li key={item}>• {item}</li>)}{plan.coverageMessage && <li>• {plan.coverageMessage}</li>}</ul></div>}
+
+              <div className="rounded-3xl border border-[var(--app-border)] bg-[var(--app-surface)] p-6"><h3 className="text-lg font-semibold">Plan sources</h3><p className="mt-1 text-sm text-[var(--app-muted)]">Trail facts come from these linked records. Open them before you go.</p><div className="mt-4 divide-y divide-[var(--app-border)]">{plan.sources.map(source => <a key={source.id} href={source.url} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-4 py-3 text-sm hover:text-[var(--app-primary)]"><span><strong>{source.id}</strong> · {source.title}<span className="ml-2 text-[var(--app-muted)]">{source.provider}</span></span><span>↗</span></a>)}</div></div>
+            </div>}
+          </section>
+        </div>
       </div>
     </main>
   );

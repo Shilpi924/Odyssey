@@ -108,9 +108,41 @@ export default function TrailResultCard({
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs font-medium text-slate-300">
               <Metric icon="🥾">{trail.length ? `Trail ${trail.length}` : null}</Metric>
               <Metric icon="↗">{trail.elevationGain}</Metric>
+              <Metric icon="⏱️">{trail.estimatedDuration || '2-3h'}</Metric>
+              {trail.surface && <Metric icon="🛤️">{trail.surface}</Metric>}
+              {trail.dogPolicy && <Metric icon="🐾">{trail.dogPolicy}</Metric>}
+              {trail.parking && <Metric icon="🚗">{trail.parking}</Metric>}
               {distanceFromUser != null && <Metric icon="⌖">{distanceFromUser} mi from you · straight-line</Metric>}
               {trail.routeType && <span className="text-[var(--app-muted)]">{trail.routeType}</span>}
             </div>
+            
+            {/* Weather */}
+            {trail.weather && (
+              <div className="mt-2 flex items-center gap-2 text-xs text-slate-300">
+                <span aria-hidden="true">{trail.weather.icon}</span>
+                <span>{trail.weather.condition} · {trail.weather.temp}°F</span>
+                <span className="text-[var(--app-muted)]">({trail.weather.forecast})</span>
+              </div>
+            )}
+            
+            {/* Accessibility */}
+            {trail.accessibility && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {trail.accessibility.wheelchair && <span className="rounded-full bg-emerald-400/10 border border-emerald-400/30 px-2 py-0.5 text-[10px] text-emerald-300">♿ Wheelchair</span>}
+                {trail.accessibility.stroller && <span className="rounded-full bg-emerald-400/10 border border-emerald-400/30 px-2 py-0.5 text-[10px] text-emerald-300">👶 Stroller</span>}
+                {trail.accessibility.paved && <span className="rounded-full bg-emerald-400/10 border border-emerald-400/30 px-2 py-0.5 text-[10px] text-emerald-300">🛤️ Paved</span>}
+              </div>
+            )}
+            
+            {/* Offline status */}
+            {trail.offlineAvailable !== undefined && (
+              <div className="mt-2 flex items-center gap-1.5 text-xs">
+                <span className={`h-2 w-2 rounded-full ${trail.offlineAvailable ? 'bg-emerald-400' : 'bg-slate-500'}`} />
+                <span className={trail.offlineAvailable ? 'text-emerald-300' : 'text-slate-400'}>
+                  {trail.offlineAvailable ? 'Offline available' : 'Requires connection'}
+                </span>
+              </div>
+            )}
             <p className="mt-2 text-[11px] text-[var(--app-muted)]">
               {hasVerifiedReviews ? `★ ${rating.toFixed(1)} · ${reviewCount.toLocaleString()} verified ${reviewCount === 1 ? 'review' : 'reviews'}` : 'No verified reviews available'}
             </p>
@@ -130,6 +162,26 @@ export default function TrailResultCard({
 
         {isSelected && (
           <div id={detailsId} className="mt-4 border-t border-[var(--app-border)] pt-4">
+            {/* AI Recommendation Explanation */}
+            {trail.recommendationReason && (
+              <div className="mb-4 rounded-xl border border-indigo-400/20 bg-indigo-400/5 px-4 py-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-sm font-semibold text-indigo-300">Why Odyssey recommends this</span>
+                  <span className="text-xs text-indigo-400/70">AI-analyzed</span>
+                </div>
+                <p className="text-xs leading-relaxed text-slate-300">{trail.recommendationReason}</p>
+                {trail.matchFactors && (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {trail.matchFactors.map(factor => (
+                      <span key={factor} className="rounded-full bg-indigo-400/10 border border-indigo-400/30 px-2 py-0.5 text-[10px] text-indigo-300">
+                        ✓ {factor}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {trail.features?.length > 0 && (
               <div className="flex flex-wrap gap-1.5" aria-label="Trail highlights">
                 {trail.features.map(feature => (

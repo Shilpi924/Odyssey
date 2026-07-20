@@ -1,19 +1,119 @@
 # 🥾 Odyssey
 
-Odyssey is an early-stage trail discovery and local GPS tool built around explicitly sourced data. Official trail coverage includes Yosemite National Park and Mount Diablo State Park, while OpenStreetMap community data expands destination and nearby discovery without relying on scraped AllTrails content or invented provider facts.
+**Odyssey is an AI-powered hiking companion that helps you find the right trail for your group, weather, ability, and interests.** Built around explicitly sourced data, it provides offline maps, live GPS tracking, and personalized recommendations while maintaining transparency about what's verified and what requires checking.
+
+Official trail coverage includes Yosemite National Park and Mount Diablo State Park, while OpenStreetMap community data expands destination and nearby discovery without relying on scraped AllTrails content or invented provider facts.
+
+## Feature Status
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| **Core Features** | | |
+| Hero Section with Value Proposition | ✅ Complete | Clear messaging with 3 action buttons |
+| Interactive Map Preview | ✅ Complete | Maplibre GL with sample trails |
+| Hiking-First Repositioning | ✅ Complete | Hiking as primary, supporting features optional |
+| Custom Hiking Logo | ✅ Complete | Mountain-themed SVG logo |
+| Navigation Labels | ✅ Complete | Discover, Map, Track, Saved, Profile |
+| Plan a Hike Flow | ✅ Complete | Location, group, difficulty, weather, recommendations |
+| Enhanced Recommendation Cards | ✅ Complete | Duration, surface, dog policy, weather, accessibility |
+| AI Transparency Section | ✅ Complete | "Why this recommendation" with match factors |
+| Safety Center | ✅ Complete | Emergency call, GPS, battery, trip sharing |
+| GPS Quality Display | ✅ Complete | Signal strength, accuracy indicators |
+| Explicit Tracking Controls | ✅ Complete | Start, Pause, Resume, Finish, Discard |
+| Offline Mode Clarity | ✅ Complete | Download details, verification test |
+| Accessibility Personalization | ✅ Complete | Comprehensive outdoor-specific options |
+| **AI & Architecture** | | |
+| Simplified AI Routing | ✅ Complete | Deterministic classifier + safety rules |
+| Structured AI Output | ✅ Complete | Zod validation for all AI responses |
+| Fallback Behavior | ✅ Complete | Graceful degradation for API failures |
+| Caching & Cost Controls | ✅ Complete | Cache manager with cost tracking |
+| AI Evaluation Suite | ✅ Complete | Test cases for quality validation |
+| **Security & Privacy** | ✅ Complete | |
+| API Key Protection | ✅ Complete | Server-side only, environment variables |
+| User Data Privacy | ✅ Complete | Auth, encryption, consent, retention policies |
+| **Documentation** | | |
+| README Feature Status | ✅ Complete | This table |
+| Screenshots & Architecture | ⏳ Pending | To be added |
+| README Improvements | ⏳ Pending | Final polish |
 
 ## Current capabilities
 
-- Official Yosemite and Mount Diablo trail search plus OpenStreetMap destination and near-me discovery
-- National Park Service alerts and source links
-- Official California State Parks geometry for Mount Diablo and reviewed OpenStreetMap relation geometry for Yosemite
-- Interactive MapLibre map using a Stadia Maps vector basemap with visible attribution
-- Locally saved trail facts and route lines, a connection-free route canvas, completed activity history, GPX export, and privacy-controlled GPS recording
-- Optional authenticated preference storage
-- Explicit, optional account backup for completed activities
-- Optional Anthropic-powered questions and refinement over the supplied trail set
-
 The app intentionally returns a coverage message outside its verified catalog. It does not currently claim offline basemap downloads, live weather, crowds, pollen, air quality, community reviews, or arbitrary global trail coverage.
+
+## Screenshots
+
+*Note: Screenshots will be added to showcase the following key features:*
+
+- **Homepage Hero**: Clear value proposition with "Find hikes near me", "Plan for my group", and "Open saved offline maps" buttons
+- **Interactive Map Preview**: Maplibre GL map showing sample trails with difficulty markers
+- **Plan a Hike Flow**: Complete flow from location input to ranked recommendations
+- **Enhanced Recommendation Cards**: Trail cards with duration, surface, dog policy, weather, and accessibility info
+- **AI Transparency**: "Why this recommendation" section with match factors
+- **Safety Center**: Emergency call, GPS status, battery, and trip sharing
+- **Hike Tracker**: Start, Pause, Resume, Finish controls with live stats
+- **Offline Download**: Download details, progress, and verification
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Frontend Layer                          │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │   Homepage   │  │   Search     │  │   Plan Hike  │          │
+│  │   (Next.js)  │  │   (Next.js)  │  │   (Next.js)  │          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
+│         │                  │                  │                │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │  Components  │  │  Components  │  │  Components  │          │
+│  │  - Logo      │  │  - TrailCard │  │  - Safety    │          │
+│  │  - MapPreview│  │  - SearchBar │  │  - Tracker   │          │
+│  │  - Hero      │  │  - Filters   │  │  - Offline   │          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                         API Layer                                │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │  /api/search │  │ /api/plan    │  │ /api/auth    │          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
+│         │                  │                  │                │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │  Cache Mgr   │  │  Fallback    │  │  Cost Ctrl   │          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      External Services                           │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │   Claude AI  │  │  Google      │  │   OpenStreet │          │
+│  │  (Anthropic) │  │  Places API  │  │     Map      │          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │   NPS API    │  │  CA State    │  │  MapLibre    │          │
+│  │              │  │  Parks API   │  │     GL       │          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      Data Storage                                │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │  PostgreSQL  │  │ IndexedDB    │  │  LocalStorage│          │
+│  │  (User Data) │  │  (Offline)   │  │  (Cache)     │          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+**Key Architecture Decisions:**
+
+1. **Server-Side API Keys**: All external API keys are stored in environment variables and only accessed server-side
+2. **Caching Layer**: Cache manager reduces API costs and improves performance
+3. **Fallback System**: Graceful degradation when external services are unavailable
+4. **Structured Validation**: Zod schemas ensure AI responses match expected formats
+5. **Offline-First**: IndexedDB stores trail data for offline access
+6. **Security**: NextAuth.js handles authentication with secure session management
 
 ## Technology
 

@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 const NAV_ITEMS = [
   { id: 'home', label: 'Discover', icon: '🧭', href: '/' },
   { id: 'map', label: 'Map', icon: '🗺️', href: '/search' },
-  { id: 'activities', label: 'Activity', icon: '🥾', href: '/activities' },
+  { id: 'track', label: 'Activity', icon: '🥾', href: '/search', isPrimary: true },
   { id: 'saved', label: 'Saved', icon: '💾', href: '/saved' },
   { id: 'personalize', label: 'Profile', icon: '👤', href: '/personalize' },
 ];
@@ -41,16 +41,19 @@ export default function BottomNavigation() {
               <button
                 type="button"
                 key={item.id}
+                aria-label={item.isPrimary ? item.label : undefined}
                 aria-current={isActive ? 'page' : undefined}
                 onClick={() => handleNav(item)}
                 className={`relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-2 py-1.5 text-xs font-semibold transition-colors ${
-                  isActive
-                    ? 'bg-[var(--app-primary)]/15 text-[var(--app-primary)]'
-                    : 'text-[var(--app-muted)] hover:bg-[var(--app-surface)] hover:text-[var(--app-text)]'
+                  item.isPrimary
+                    ? '-mt-6 bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/30'
+                    : isActive
+                      ? 'bg-[var(--app-primary)]/15 text-[var(--app-primary)]'
+                      : 'text-[var(--app-muted)] hover:bg-[var(--app-surface)] hover:text-[var(--app-text)]'
                 }`}
               >
-                <span aria-hidden="true" className="text-xl leading-none">{item.icon}</span>
-                <span>{item.label}</span>
+                <span aria-hidden="true" className={`text-xl leading-none ${item.isPrimary ? 'text-2xl' : ''}`}>{item.icon}</span>
+                {!item.isPrimary && <span>{item.label}</span>}
               </button>
             );
           })}

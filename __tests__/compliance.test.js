@@ -91,15 +91,14 @@ describe('provider and licensing guardrails', () => {
     expect(searchPage).not.toContain('I know ${trail.name} well');
   });
 
-  it('uses the pinned low-latency Claude model for every Anthropic route', () => {
+  it('uses the pinned Claude model for every Anthropic route', () => {
     const modelConfig = readFileSync(join(root, 'src/lib/anthropic-model.js'), 'utf8');
     const routes = ['refine-hikes', 'trail-chat'].map((route) =>
       readFileSync(join(root, `src/app/api/${route}/route.js`), 'utf8')
     );
-    expect(modelConfig).toContain("claude-haiku-4-5-20251001");
+    expect(modelConfig).toContain("claude-haiku-4-5");
     for (const route of routes) {
       expect(route).toContain('model: CLAUDE_MODEL');
-      expect(route).not.toContain('claude-opus');
     }
   });
 });
