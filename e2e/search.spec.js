@@ -175,7 +175,7 @@ test.describe('Search Page Flow', () => {
     await expect(resultCard.getByRole('button', { name: 'View map' })).toBeVisible();
 
     const primaryNav = page.getByRole('navigation', { name: 'Primary' });
-    await expect(primaryNav.getByRole('button')).toHaveCount(4);
+    await expect(primaryNav.getByRole('button')).toHaveCount(5);
     await expect(primaryNav.getByRole('button', { name: 'Track' })).toHaveCount(0);
     await expect(primaryNav.getByRole('button', { name: 'Discover' })).toHaveAttribute('aria-current', 'page');
 
@@ -342,7 +342,7 @@ test.describe('Search Page Flow', () => {
 
     const card = page.getByRole('article', { name: 'Mary Bowerman Trail' });
     await expect(card.getByText('0.7 miles')).toBeVisible();
-    await expect(card.getByText('Source: California State Parks')).toHaveCount(0);
+    await expect(card.getByText('Source: California State Parks')).toHaveCount(1);
     await expect(page.getByText('Official trail information')).toHaveCount(0);
     await expect(page.getByText(/Officially sourced trail information/)).toHaveCount(0);
 
@@ -379,7 +379,7 @@ test.describe('Search Page Flow', () => {
     await expect(page.getByText('Showing Mary Bowerman Trail', { exact: true })).toBeVisible();
 
     await card.getByText('Source & access', { exact: true }).click();
-    await expect(card.getByText('Source: California State Parks')).toBeVisible();
+    await expect(card.getByText('Source: California State Parks')).toHaveCount(2);
     await expect(card.getByText('Route geometry: California State Parks')).toBeVisible();
     await expect(card.getByText('Current access not listed')).toBeVisible();
 

@@ -71,7 +71,7 @@ function SubGroup({ label, children }) {
 export default function Personalize() {
   const [prefs, setPrefs] = useState({
     interests: ['Hiking'], // Default to hiking
-    hiking: { difficulty: '', features: '', length: '', elevation: '' },
+    hiking: { difficulty: [], features: [], length: '', elevation: '' },
     food: { cuisines: [], diningStyle: '', mealTime: [], atmosphere: [], diet: [] },
     places: { types: [], vibe: [] },
     family: { activities: [], ages: [] },

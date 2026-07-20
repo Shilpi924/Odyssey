@@ -10,7 +10,7 @@ import { db } from '@/lib/db';
 import { createCompletedActivity } from '@/lib/activities';
 import { createSavedHike, fetchOfflineRoute, isRouteGeometry } from '@/lib/offline-trails';
 import { getMapStyle } from '@/lib/map-style';
-import TrailCardSkeleton from '@/components/ui/TrailCardSkeleton';
+import CreativeLoader from '@/components/ui/CreativeLoader';
 import QuickFilters from '@/components/ui/QuickFilters';
 import SearchHistory, { addToHistory } from '@/components/ui/SearchHistory';
 import LocationAccessCard from '@/components/privacy/LocationAccessCard';
@@ -1763,11 +1763,7 @@ function HikeSearchContent() {
         )}
 
         {status === 'searching' && (
-          <div className="flex flex-col gap-4 p-4 mt-2">
-            <TrailCardSkeleton />
-            <TrailCardSkeleton />
-            <TrailCardSkeleton />
-          </div>
+          <CreativeLoader />
         )}
 
         {status === 'error' && (
