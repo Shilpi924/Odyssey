@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { clearWatch, isGeolocationAvailable, watchPosition } from '@/lib/device-geolocation';
 
 export default function HikeTracker({ trail, onClose }) {
   const [trackingState, setTrackingState] = useState('idle'); // idle, tracking, paused
@@ -32,8 +33,8 @@ export default function HikeTracker({ trail, onClose }) {
       }, 1000);
 
       // Watch GPS position
-      if (navigator.geolocation) {
-        watchId = navigator.geolocation.watchPosition(
+      if (isGeolocationAvailable()) {
+        watchId = watchPosition(
           (position) => {
             setStats(prev => ({
               ...prev,
@@ -52,7 +53,7 @@ export default function HikeTracker({ trail, onClose }) {
 
     return () => {
       if (interval) clearInterval(interval);
-      if (watchId) navigator.geolocation.clearWatch(watchId);
+      if (watchId) clearWatch(watchId);
     };
   }, [trackingState]);
 

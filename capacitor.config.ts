@@ -7,7 +7,7 @@ const config: CapacitorConfig = {
   bundledWebRuntime: false,
   server: {
     url: 'https://odysseypro.vercel.app',
-    cleartext: true
+    cleartext: false
   }
 };
 

@@ -139,7 +139,7 @@ export default function TrailResultCard({
               <div className="mt-2 flex items-center gap-1.5 text-xs">
                 <span className={`h-2 w-2 rounded-full ${trail.offlineAvailable ? 'bg-emerald-400' : 'bg-slate-500'}`} />
                 <span className={trail.offlineAvailable ? 'text-emerald-300' : 'text-slate-400'}>
-                  {trail.offlineAvailable ? 'Offline available' : 'Requires connection'}
+                  {trail.offlineAvailable ? 'Offline route available' : 'Route requires connection'}
                 </span>
               </div>
             )}
@@ -233,7 +233,7 @@ export default function TrailResultCard({
               onClick={onDownloadOffline}
               className="mt-2 min-h-11 w-full rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-3 text-sm font-bold text-emerald-200 hover:border-emerald-300/50 hover:bg-emerald-400/15"
             >
-              <span aria-hidden="true">↓</span> Download offline
+              <span aria-hidden="true">↓</span> Save route offline
             </button>
 
             {trail.sourceKind !== 'community' && trail.placeId && (

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { db } from '@/lib/db';
+import { clearWatch, isGeolocationAvailable, watchPosition } from '@/lib/device-geolocation';
 import { getMapStyle } from '@/lib/map-style';
 import LocationAccessCard from '@/components/privacy/LocationAccessCard';
 import useLocationAccess from '@/hooks/useLocationAccess';
@@ -113,8 +114,8 @@ export default function SavedHikesPage() {
 
   // Track live GPS
   useEffect(() => {
-    if (!locationAllowed || savedHikes.length === 0 || !navigator.geolocation) return;
-    const watchId = navigator.geolocation.watchPosition(
+    if (!locationAllowed || savedHikes.length === 0 || !isGeolocationAvailable()) return;
+    const watchId = watchPosition(
       (pos) => setUserLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
       (err) => {
         if (err.code === 1) forgetLocation();
@@ -122,7 +123,7 @@ export default function SavedHikesPage() {
       },
       { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
     );
-    return () => navigator.geolocation.clearWatch(watchId);
+    return () => clearWatch(watchId);
   }, [locationAllowed, savedHikes.length, forgetLocation]);
 
   const removeHike = async (hike) => {

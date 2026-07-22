@@ -7,6 +7,7 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    "android/**",
     "out/**",
     "build/**",
     "services/rag-embedder/.venv/**",

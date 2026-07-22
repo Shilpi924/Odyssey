@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { getCurrentPosition, isGeolocationAvailable } from '@/lib/device-geolocation';
 
 export default function SafetyCenter({ userLocation, trailheadLocation, onClose }) {
   const [gpsData, setGpsData] = useState({
@@ -18,8 +19,8 @@ export default function SafetyCenter({ userLocation, trailheadLocation, onClose 
 
   useEffect(() => {
     // Get GPS data
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
+    if (isGeolocationAvailable()) {
+      getCurrentPosition(
         (position) => {
           setGpsData({
             latitude: position.coords.latitude,

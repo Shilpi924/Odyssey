@@ -11,12 +11,17 @@
     "test:e2e": "playwright test",
     "licenses": "node scripts/generate-third-party-notices.mjs",
     "licenses:check": "node scripts/generate-third-party-notices.mjs --check",
+    "android:sync": "npx cap sync android",
+    "android:bundle": "npm run build && npm run android:sync && cd android && ./gradlew bundleRelease",
+    "play:check": "node scripts/check-play-release.mjs",
+    "play:check:production": "node scripts/check-play-release.mjs --production",
     "rag:ingest": "node scripts/rag-ingest.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
     "@capacitor/android": "^8.4.2",
     "@capacitor/core": "^8.4.2",
+    "@capacitor/geolocation": "^8.2.0",
     "@serwist/next": "^9.5.11",
     "dexie": "^4.4.4",
     "framer-motion": "^12.42.2",
@@ -46,5 +51,9 @@
     "jsdom": "^29.1.1",
     "tailwindcss": "^4",
     "vitest": "^4.1.9"
+  },
+  "overrides": {
+    "postcss": "8.5.16",
+    "sharp": "0.35.3"
   }
 }

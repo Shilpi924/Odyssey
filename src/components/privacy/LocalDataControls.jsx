@@ -90,7 +90,7 @@ export default function LocalDataControls({ signedIn = false }) {
       <p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Privacy &amp; local data</p>
       <h2 className="mt-2 text-xl font-semibold text-white">Control what this browser keeps</h2>
       <p className="mt-2 text-sm leading-relaxed text-slate-400">These controls target Odyssey’s own browser records. They do not change browser-level location permission or delete unrelated website data.</p>
-      {signedIn && <p className="mt-2 text-xs text-amber-200/80">Signed-in preferences stored on the server can sync back later. See the Privacy Notice to request server-side deletion.</p>}
+      {signedIn && <p className="mt-2 text-xs text-amber-200/80">Signed-in preferences stored on the server can sync back later unless you delete your Odyssey account data.</p>}
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
         <button type="button" disabled={Boolean(busy)} onClick={clearSearchAndPlanning} className="rounded-xl border border-slate-600 bg-slate-800 px-4 py-3 text-sm font-semibold text-slate-100 hover:bg-slate-700 disabled:opacity-50">
           {busy === 'search' ? 'Clearing…' : 'Clear searches & plan'}
@@ -103,7 +103,7 @@ export default function LocalDataControls({ signedIn = false }) {
         </button>
       </div>
       {message && <p role="status" className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-slate-200">{message}</p>}
-      <p className="mt-4 text-xs text-slate-500">For account information stored on the server, follow the request instructions in the <Link href="/legal/privacy" className="text-cyan-300 underline">Privacy Notice</Link>.</p>
+      <p className="mt-4 text-xs text-slate-500">For synced account information, use <Link href="/account-deletion" className="text-cyan-300 underline">Delete Odyssey account data</Link>. Details are in the <Link href="/legal/privacy" className="text-cyan-300 underline">Privacy Notice</Link>.</p>
     </section>
   );
 }

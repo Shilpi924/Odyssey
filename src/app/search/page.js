@@ -8,6 +8,7 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { db } from '@/lib/db';
 import { createCompletedActivity } from '@/lib/activities';
+import { clearWatch, getCurrentPosition, isGeolocationAvailable, watchPosition } from '@/lib/device-geolocation';
 import { createSavedHike, fetchOfflineRoute, isRouteGeometry } from '@/lib/offline-trails';
 import { getMapStyle } from '@/lib/map-style';
 import CreativeLoader from '@/components/ui/CreativeLoader';
@@ -488,8 +489,8 @@ function HikeSearchContent() {
       }
       setSavedIds(previous => new Set(previous).add(`${trail.name}-${trail.lat}`));
       setNotice(route
-        ? `${trail.name} facts and route are downloaded for offline use.`
-        : `${trail.name} facts are saved offline. A downloadable route line is not available from this source.`);
+        ? `${trail.name} facts and route are saved on this device. The basemap still requires a connection.`
+        : `${trail.name} facts are saved on this device. No offline route line is available from this source.`);
     } catch (downloadError) {
       console.error('Failed to download trail:', downloadError);
       setNotice('This trail could not be downloaded. Check your connection and try again.');
@@ -686,8 +687,8 @@ function HikeSearchContent() {
 
   // ── Watch live GPS location
   useEffect(() => {
-    if (!locationAllowed || isHiking || !navigator.geolocation) return;
-    const watchId = navigator.geolocation.watchPosition(
+    if (!locationAllowed || isHiking || !isGeolocationAvailable()) return;
+    const watchId = watchPosition(
       (pos) => {
         const { accuracy } = pos.coords;
         if (accuracy <= 20) {
@@ -719,7 +720,7 @@ function HikeSearchContent() {
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
     );
-    return () => navigator.geolocation.clearWatch(watchId);
+    return () => clearWatch(watchId);
   }, [locationAllowed, isHiking, forgetLocation]);
 
   // ── Request Persistent Storage
@@ -850,7 +851,7 @@ function HikeSearchContent() {
 
   function getLocation() {
     return new Promise((res, rej) =>
-      navigator.geolocation.getCurrentPosition(res, rej, { timeout: 10000 })
+      getCurrentPosition(res, rej, { timeout: 10000 })
     );
   }
 
@@ -875,9 +876,9 @@ function HikeSearchContent() {
   };
 
   useEffect(() => {
-    if (!locationReady || !locationAllowed || userLocation || !navigator.geolocation) return;
+    if (!locationReady || !locationAllowed || userLocation || !isGeolocationAvailable()) return;
     let active = true;
-    navigator.geolocation.getCurrentPosition(
+    getCurrentPosition(
       position => {
         if (active) setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
       },
@@ -1147,7 +1148,7 @@ function HikeSearchContent() {
   };
 
   const startHike = (trail, isRestored = false, isRestoredPaused = false, locationAuthorized = false, distanceAuthorized = false) => {
-    if (!navigator.geolocation) {
+    if (!isGeolocationAvailable()) {
       setNotice('GPS is not available in this browser, so hike tracking cannot start.');
       return;
     }
@@ -1224,8 +1225,8 @@ function HikeSearchContent() {
       setHikeDuration(Math.max(0, elapsed));
     }, 1000);
 
-    if ('geolocation' in navigator) {
-      watchIdRef.current = navigator.geolocation.watchPosition(
+    if (isGeolocationAvailable()) {
+      watchIdRef.current = watchPosition(
         (pos) => {
           // If paused, we don't accumulate stats or follow location
           const isCurrentlyPaused = document.documentElement.dataset.paused === 'true';
@@ -1400,7 +1401,7 @@ function HikeSearchContent() {
     setRecoveredHike(null);
 
     if (watchIdRef.current) {
-      navigator.geolocation.clearWatch(watchIdRef.current);
+      clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
     if (timerRef.current) {

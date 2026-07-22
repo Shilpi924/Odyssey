@@ -60,7 +60,7 @@ describe('TrailResultCard', () => {
     expect(screen.getByText('Accessible first 0.2 mi')).toBeVisible();
     expect(screen.getByRole('button', { name: 'View map' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Start hike' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Download offline' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Save route offline' })).toBeVisible();
 
     const sourceSummary = screen.getByText('Source & access', { exact: true });
     const sourceDetails = sourceSummary.closest('details');
@@ -73,7 +73,7 @@ describe('TrailResultCard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'View map' }));
     fireEvent.click(screen.getByRole('button', { name: 'Start hike' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save trail' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Download offline' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save route offline' }));
     expect(onViewMap).toHaveBeenCalledOnce();
     expect(onStartHike).toHaveBeenCalledOnce();
     expect(onSave).toHaveBeenCalledOnce();
