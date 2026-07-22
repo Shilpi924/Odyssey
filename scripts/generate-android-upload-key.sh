@@ -1,8 +1,16 @@
 #!/bin/sh
 set -eu
 
-if [ "$#" -ne 1 ]; then
-  echo "Usage: $0 /absolute/path/to/odyssey-upload.jks" >&2
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+  echo "Usage: $0 /absolute/path/to/odyssey-upload.jks [--generate-password]" >&2
+  exit 2
+fi
+
+generate_password=false
+if [ "${2:-}" = "--generate-password" ]; then
+  generate_password=true
+elif [ "$#" -eq 2 ]; then
+  echo "Unknown option: $2" >&2
   exit 2
 fi
 
@@ -19,15 +27,20 @@ fi
 key_dir=$(dirname "$key_path")
 mkdir -p "$key_dir"
 
-printf "Keystore password (store this in a password manager): "
-stty -echo
-IFS= read -r key_password
-stty echo
-printf "\nRepeat password: "
-stty -echo
-IFS= read -r key_password_repeat
-stty echo
-printf "\n"
+if [ "$generate_password" = true ]; then
+  key_password=$(openssl rand -hex 24)
+  key_password_repeat=$key_password
+else
+  printf "Keystore password (store this in a password manager): "
+  stty -echo
+  IFS= read -r key_password
+  stty echo
+  printf "\nRepeat password: "
+  stty -echo
+  IFS= read -r key_password_repeat
+  stty echo
+  printf "\n"
+fi
 
 if [ "$key_password" != "$key_password_repeat" ]; then
   echo "Passwords do not match." >&2
@@ -57,6 +70,14 @@ umask 077
   printf 'keyAlias=odyssey-upload\n'
   printf 'keyPassword=%s\n' "$key_password"
 } > "$properties_path"
+
+if [ "$generate_password" = true ] && command -v security >/dev/null 2>&1; then
+  if security add-generic-password -U -a "odyssey-upload" -s "Odyssey Android Upload Key" -w "$key_password" >/dev/null; then
+    echo "Generated password saved in macOS Keychain as 'Odyssey Android Upload Key'."
+  else
+    echo "Warning: the generated password is only in $properties_path; back up that file now." >&2
+  fi
+fi
 
 echo "Upload keystore created at $key_path"
 echo "Gradle signing properties created at $properties_path"

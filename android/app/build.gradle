@@ -3,6 +3,7 @@ apply plugin: 'com.android.application'
 def keystorePropertiesFile = rootProject.file('keystore.properties')
 def keystoreProperties = new Properties()
 def releaseSigningConfigured = keystorePropertiesFile.exists()
+def localReleaseStoreFile = rootProject.file('odyssey-upload.jks')
 if (releaseSigningConfigured) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
@@ -26,7 +27,9 @@ android {
     signingConfigs {
         if (releaseSigningConfigured) {
             release {
-                storeFile file(keystoreProperties['storeFile'])
+                // macOS can deny Gradle daemons access to Documents. Prefer an
+                // ignored local working copy while keeping the approved backup there.
+                storeFile localReleaseStoreFile.exists() ? localReleaseStoreFile : file(keystoreProperties['storeFile'])
                 storePassword keystoreProperties['storePassword']
                 keyAlias keystoreProperties['keyAlias']
                 keyPassword keystoreProperties['keyPassword']

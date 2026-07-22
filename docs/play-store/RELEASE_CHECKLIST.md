@@ -1,6 +1,6 @@
 # Odyssey Google Play Release Checklist
 
-Last engineering review: July 21, 2026. Package ID: `com.odyssey.app`. Current version: `1.0` (`versionCode 1`). Target SDK: 36.
+Last engineering review: July 22, 2026. Package ID: `com.odyssey.app`. Current version: `1.0` (`versionCode 1`). Target SDK: 36.
 
 ## Nine-step status
 
@@ -12,7 +12,7 @@ Last engineering review: July 21, 2026. Package ID: `com.odyssey.app`. Current v
 | 4. Production map plan/domain | Commercial gate | Purchase an appropriate Stadia Maps plan and authenticate the final production host. Do not claim this is complete from source code alone. |
 | 5. Disable cleartext traffic | Implemented | Capacitor and Android application configuration both reject cleartext HTTP. |
 | 6. Lint generated output correctly | Implemented | Generated `android/**` output is globally ignored; source remains linted. |
-| 7. Release signing and AAB | Ready for secret setup | Run the upload-key script, back up the key, then run `npm run android:bundle`. Enroll in Play App Signing when the Play Console app is created. |
+| 7. Release signing and AAB | Implemented locally | A protected 4096-bit RSA upload key and signed AAB were generated. Enroll in Play App Signing when the Play Console app is created. |
 | 8. Data Safety | Prepared, submission gate | Complete and verify `DATA_SAFETY.md` against the deployed build, then submit it in Play Console. |
 | 9. Closed testing | Time/account gate | If the personal developer account was created after Nov. 13, 2023, complete 12 continuously opted-in testers for 14 days and apply for production access. |
 
@@ -32,6 +32,8 @@ Generate an upload key once, using an absolute path outside the repository:
 npm run android:bundle
 ```
 
+To generate a strong random password and store it in macOS Keychain without displaying it, add `--generate-password` to the key-generator command.
+
 Back up the `.jks` file and `android/keystore.properties` securely. The properties file contains the password and is intentionally ignored by Git. Prefer Google Play App Signing: Google protects the app-signing key while this local key is the replaceable upload key.
 
 Immediately before upload, run the production gate with each operator attestation set to `true`:
@@ -46,6 +48,15 @@ npm run play:check:production
 ```
 
 An attestation means the action was actually completed; it is not a bypass.
+
+## Current signed artifact
+
+- AAB: `android/app/build/outputs/bundle/release/app-release.aab`
+- AAB SHA-256: `c118cc1f5d8e73880cbc6a5859be9c8705c73424c124fbd9a98cbff39a415fe3`
+- Upload certificate SHA-256: `92:A3:AE:F2:A1:28:F3:7E:F1:49:34:5C:2F:8B:AE:E2:C6:02:65:53:B8:4A:66:3C:C9:BD:80:E1:B1:7C:D4:3F`
+- Upload certificate validity: July 22, 2026 through December 6, 2053
+
+The upload key backup is outside Git, and its generated password is stored in macOS Keychain as `Odyssey Android Upload Key`. The local Gradle working copy, signing properties, and AAB are ignored by Git.
 
 ## Final Play Console work
 
