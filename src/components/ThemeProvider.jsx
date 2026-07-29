@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { getCurrentPosition, isGeolocationAvailable } from '@/lib/device-geolocation';
 import { hasLocationAccess } from '@/lib/location-access';
 import { DEFAULT_THEME, isDaylight, normalizeDisplayPreferences, resolveTheme, serializeDisplayPreferences, THEME_COOKIE } from '@/lib/theme';
+import { restorePreferencesFromBackup } from '@/lib/preferences';
 
 export function applyDisplayPreferences(preferences = {}, environment = {}) {
   if (typeof document === 'undefined') return DEFAULT_THEME;
@@ -46,6 +47,13 @@ export default function ThemeProvider({ children, initialDisplay }) {
   }, [initialDisplay]);
 
   useEffect(() => {
+    const initialize = async () => {
+      const saved = await restorePreferencesFromBackup();
+      if (saved) {
+        applyDisplayPreferences(saved, { persistCookie: true });
+      }
+    };
+    initialize();
     loadAndApply();
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = () => loadAndApply();

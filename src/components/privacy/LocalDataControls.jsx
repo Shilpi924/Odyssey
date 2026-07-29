@@ -72,6 +72,12 @@ export default function LocalDataControls({ signedIn = false }) {
       forgetLocationAccess();
       expireCookie(document, THEME_COOKIE);
       await clearBrowserCaches(window.caches);
+      try {
+        const { removeLocalPreferences } = await import('@/lib/preferences');
+        await removeLocalPreferences();
+      } catch (err) {
+        console.error('Failed to remove local preferences backup:', err);
+      }
     },
     'All scoped Odyssey data stored by this browser was cleared.'
   );

@@ -11,6 +11,7 @@ import { createCompletedActivity } from '@/lib/activities';
 import { clearWatch, getCurrentPosition, isGeolocationAvailable, watchPosition } from '@/lib/device-geolocation';
 import { createSavedHike, fetchOfflineRoute, isRouteGeometry } from '@/lib/offline-trails';
 import { getMapStyle } from '@/lib/map-style';
+import { restorePreferencesFromBackup } from '@/lib/preferences';
 import CreativeLoader from '@/components/ui/CreativeLoader';
 import QuickFilters from '@/components/ui/QuickFilters';
 import SearchHistory, { addToHistory } from '@/components/ui/SearchHistory';
@@ -759,22 +760,24 @@ function HikeSearchContent() {
     };
   }, []);
 
-  // ── Load preferences
   useEffect(() => {
-    let next = {};
-    const saved = localStorage.getItem('userPreferences');
-    if (saved) { try { next = JSON.parse(saved); } catch {} }
-    const difficulty = searchParams.get('difficulty');
-    const distance = searchParams.get('distance');
-    const accessibility = searchParams.get('accessibility');
-    const group = searchParams.get('group');
-    if (difficulty) next = { ...next, hiking: { ...(next.hiking || {}), difficulty: difficulty.split(',') } };
-    if (distance) next = { ...next, hiking: { ...(next.hiking || {}), length: distance } };
-    if (accessibility) next = { ...next, accessibility: accessibility.split(',').filter(Boolean) };
-    if (group) next = { ...next, groupDynamics: group };
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setPreferences(next);
-    setPreferencesReady(true);
+    const load = async () => {
+      let next = {};
+      const saved = await restorePreferencesFromBackup();
+      if (saved) { next = saved; }
+      const difficulty = searchParams.get('difficulty');
+      const distance = searchParams.get('distance');
+      const accessibility = searchParams.get('accessibility');
+      const group = searchParams.get('group');
+      if (difficulty) next = { ...next, hiking: { ...(next.hiking || {}), difficulty: difficulty.split(',') } };
+      if (distance) next = { ...next, hiking: { ...(next.hiking || {}), length: distance } };
+      if (accessibility) next = { ...next, accessibility: accessibility.split(',').filter(Boolean) };
+      if (group) next = { ...next, groupDynamics: group };
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPreferences(next);
+      setPreferencesReady(true);
+    };
+    load();
   }, [searchParams]);
 
   // ── Background Preloading of Hikes Near Me

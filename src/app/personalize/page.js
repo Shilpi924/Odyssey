@@ -6,6 +6,7 @@ import { useSession, signIn, signOut } from 'next-auth/react';
 import { applyDisplayPreferences } from '@/components/ThemeProvider';
 import LocalDataControls from '@/components/privacy/LocalDataControls';
 import { DEFAULT_THEME, THEMES, resolveTheme } from '@/lib/theme';
+import { saveLocalPreferences, restorePreferencesFromBackup } from '@/lib/preferences';
 
 function PillButton({ label, selected, onClick, color = 'indigo' }) {
   const colors = {
@@ -132,7 +133,7 @@ export default function Personalize() {
             if (json.preferences && Object.keys(json.preferences).length > 0) {
               data = json.preferences;
               // Sync to local storage for search/page.js to easily read
-              localStorage.setItem('userPreferences', JSON.stringify(data));
+              await saveLocalPreferences(data);
             }
           }
         } catch (e) {
@@ -141,14 +142,7 @@ export default function Personalize() {
       } 
       
       if (!data) {
-        const saved = localStorage.getItem('userPreferences');
-        if (saved) {
-          try {
-            data = JSON.parse(saved);
-          } catch (e) {
-            console.error('Failed to parse saved preferences', e);
-          }
-        }
+        data = await restorePreferencesFromBackup();
       }
 
       if (data) {
@@ -215,7 +209,7 @@ export default function Personalize() {
   const selected = (interest) => prefs.interests.includes(interest);
 
   const handleSave = async () => {
-    localStorage.setItem('userPreferences', JSON.stringify(prefs));
+    await saveLocalPreferences(prefs);
     if (session?.user) {
       try {
         const resolvedTheme = resolveTheme(prefs, {
