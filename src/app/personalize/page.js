@@ -7,6 +7,7 @@ import { applyDisplayPreferences } from '@/components/ThemeProvider';
 import LocalDataControls from '@/components/privacy/LocalDataControls';
 import { DEFAULT_THEME, THEMES, resolveTheme } from '@/lib/theme';
 import { saveLocalPreferences, restorePreferencesFromBackup } from '@/lib/preferences';
+import { motion } from 'framer-motion';
 
 function PillButton({ label, selected, onClick, color = 'indigo' }) {
   const colors = {
@@ -22,9 +23,17 @@ function PillButton({ label, selected, onClick, color = 'indigo' }) {
     cyan: selected ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/30 ring-2 ring-cyan-400' : 'bg-slate-700 text-slate-300 hover:bg-slate-600',
   };
   return (
-    <button type="button" aria-pressed={selected} onClick={onClick} className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${colors[color]}`}>
+    <motion.button
+      type="button"
+      aria-pressed={selected}
+      onClick={onClick}
+      whileHover={{ scale: 1.04, y: -1 }}
+      whileTap={{ scale: 0.96 }}
+      transition={{ type: 'spring', stiffness: 500, damping: 15 }}
+      className={`px-4 py-2 rounded-full text-sm font-medium transition-colors duration-200 cursor-pointer ${colors[color]}`}
+    >
       {label}
-    </button>
+    </motion.button>
   );
 }
 
@@ -50,13 +59,18 @@ function SubSection({ icon, title, color, children }) {
     cyan: 'text-cyan-300',
   };
   return (
-    <section className={`rounded-2xl border ${borderColor[color]} p-6 space-y-7`}>
+    <motion.section
+      initial={{ opacity: 0, y: 15 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, ease: 'easeOut' }}
+      className={`rounded-2xl border ${borderColor[color]} p-6 space-y-7`}
+    >
       <div className="flex items-center gap-2 mb-2">
         <span className="text-2xl">{icon}</span>
         <h2 className={`text-xl font-semibold ${textColor[color]}`}>{title}</h2>
       </div>
       {children}
-    </section>
+    </motion.section>
   );
 }
 
