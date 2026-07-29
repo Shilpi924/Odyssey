@@ -44,6 +44,7 @@ export default function TrailResultCard({
   onViewMap,
   routeStatus,
   distanceFromUser,
+  preferences,
 }) {
   const slug = String(trail.placeId || index).replace(/[^a-z0-9-]/gi, '-');
   const headingId = `trail-heading-${slug}`;
@@ -56,6 +57,73 @@ export default function TrailResultCard({
   const rating = Number(trail.rating);
   const reviewCount = Number(trail.userRatingsTotal);
   const hasVerifiedReviews = Number.isFinite(rating) && rating > 0 && Number.isFinite(reviewCount) && reviewCount > 0;
+
+  // Calculate preference match percentage
+  let matchPercent = null;
+  if (preferences && preferences.hiking) {
+    let totalCriteria = 0;
+    let matchedCriteria = 0;
+    
+    // 1. Difficulty Match
+    const prefDiffs = preferences.hiking.difficulty || [];
+    if (prefDiffs.length > 0 && !prefDiffs.includes('None') && !prefDiffs.includes('')) {
+      totalCriteria++;
+      if (trail.difficulty && prefDiffs.includes(trail.difficulty)) {
+        matchedCriteria++;
+      }
+    }
+    
+    // 2. Length Match
+    const prefLength = preferences.hiking.length;
+    if (prefLength && prefLength !== 'None' && prefLength !== '') {
+      totalCriteria++;
+      const cleanedLen = String(trail.length || '').replace(/[^0-9.-]/g, '');
+      const trailLenNum = parseFloat(cleanedLen);
+      if (!isNaN(trailLenNum)) {
+        let lenMatch = false;
+        if (prefLength === 'short' && trailLenNum < 2) lenMatch = true;
+        else if (prefLength === 'medium' && trailLenNum >= 2 && trailLenNum <= 5) lenMatch = true;
+        else if (prefLength === 'long' && trailLenNum > 5 && trailLenNum <= 10) lenMatch = true;
+        else if (prefLength === 'verylong' && trailLenNum > 10) lenMatch = true;
+        
+        if (lenMatch) matchedCriteria++;
+      }
+    }
+    
+    // 3. Elevation Match
+    const prefElevation = preferences.hiking.elevation;
+    if (prefElevation && prefElevation !== 'None' && prefElevation !== '') {
+      totalCriteria++;
+      const cleanedElev = String(trail.elevationGain || '').replace(/[^0-9.-]/g, '');
+      const trailElevNum = parseFloat(cleanedElev);
+      if (!isNaN(trailElevNum)) {
+        let elevMatch = false;
+        if (prefElevation === 'flat' && trailElevNum < 200) elevMatch = true;
+        else if (prefElevation === 'gentle' && trailElevNum >= 200 && trailElevNum < 800) elevMatch = true;
+        else if (prefElevation === 'moderate' && trailElevNum >= 800 && trailElevNum <= 2000) elevMatch = true;
+        else if (prefElevation === 'steep' && trailElevNum > 2000) elevMatch = true;
+        
+        if (elevMatch) matchedCriteria++;
+      }
+    }
+
+    // 4. Features Match
+    const prefFeatures = preferences.hiking.features || [];
+    const activePrefFeatures = prefFeatures.filter(f => f !== 'None' && f !== '');
+    if (activePrefFeatures.length > 0) {
+      const trailFeats = trail.features || [];
+      activePrefFeatures.forEach(feat => {
+        totalCriteria++;
+        if (trailFeats.includes(feat)) {
+          matchedCriteria++;
+        }
+      });
+    }
+    
+    if (totalCriteria > 0) {
+      matchPercent = Math.round((matchedCriteria / totalCriteria) * 100);
+    }
+  }
 
   return (
     <article
@@ -79,12 +147,21 @@ export default function TrailResultCard({
               <h3 id={headingId} className="min-w-0 flex-1 text-[17px] font-bold leading-tight text-[var(--app-text)]">
                 {trail.name}
               </h3>
-              <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
-                <span className="rounded-full border border-[var(--app-border)] bg-[var(--app-raised)] px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-[var(--app-muted)]">
+              <div className="flex shrink-0 flex-wrap justify-end gap-1.5 items-center">
+                {matchPercent !== null && (
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                    matchPercent >= 85 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' :
+                    matchPercent >= 50 ? 'border-indigo-500/30 bg-indigo-500/10 text-indigo-300' :
+                    'border-slate-500/30 bg-slate-800 text-[var(--app-muted)]'
+                  }`}>
+                    🎯 {matchPercent}% Match
+                  </span>
+                )}
+                <span className="rounded-full border border-[var(--app-border)] bg-[var(--app-raised)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--app-muted)]">
                   {sourceLabel}
                 </span>
                 {trail.difficulty && (
-                  <span className={`rounded-full border px-2 py-1 text-[10px] font-bold ${DIFFICULTY_STYLES[trail.difficulty] || DIFFICULTY_STYLES.Moderate}`}>
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${DIFFICULTY_STYLES[trail.difficulty] || DIFFICULTY_STYLES.Moderate}`}>
                     {trail.difficulty}
                   </span>
                 )}

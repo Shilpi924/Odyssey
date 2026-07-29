@@ -1908,6 +1908,7 @@ function HikeSearchContent() {
                       distanceFromUser={userLocation && Number.isFinite(trail.lat) && Number.isFinite(trail.lng)
                         ? calculateDistanceMiles(userLocation.lat, userLocation.lng, trail.lat, trail.lng).toFixed(1)
                         : null}
+                      preferences={preferences}
                     />
                   );
                 })
