@@ -2050,6 +2050,11 @@ function HikeSearchContent() {
                 }
               }}
               onError={(e) => {
+                const message = e.error?.message || e.message || '';
+                if (message.includes('404')) {
+                  console.warn('MapLibre expected 404 (missing tile level):', message);
+                  return;
+                }
                 if (mapErrorReportedRef.current) return;
                 mapErrorReportedRef.current = true;
                 console.warn('Map provider is temporarily unavailable:', e.error || e);

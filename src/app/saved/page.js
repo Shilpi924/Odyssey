@@ -304,6 +304,11 @@ export default function SavedHikesPage() {
               onZoom={(e) => setMapZoom(e.viewState.zoom)}
               onLoad={() => setMapError(false)}
               onError={(event) => {
+                const message = event.error?.message || event.message || '';
+                if (message.includes('404')) {
+                  console.warn('MapLibre expected 404 (missing tile level):', message);
+                  return;
+                }
                 console.error('Map provider error:', event.error || event);
                 setMapError(true);
               }}
