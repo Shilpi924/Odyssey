@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import Logo from '@/components/Logo';
+import PreferencesWidget from '@/components/features/PreferencesWidget';
 
 const actions = [
   { href: '/search?nearme=true', eyebrow: 'Use my location', title: 'Find hikes near me', icon: '⌖', tone: 'emerald' },
@@ -48,6 +49,10 @@ export default function Home() {
             </div>
             <p className="mt-4 text-xs text-stone-500">No account required · Official conditions should always be verified before starting</p>
           </div>
+        </div>
+
+        <div className="mt-12 max-w-xl">
+          <PreferencesWidget />
         </div>
 
         <div className="mt-20 grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
