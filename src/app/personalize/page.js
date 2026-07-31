@@ -83,6 +83,60 @@ function SubGroup({ label, children }) {
   );
 }
 
+function getHikerVibe(prefs) {
+  if (!prefs || !prefs.hiking) return null;
+  
+  const tags = [];
+  const descriptions = [];
+
+  const diffs = prefs.hiking.difficulty || [];
+  const features = prefs.hiking.features || [];
+  const length = prefs.hiking.length || '';
+  const elevation = prefs.hiking.elevation || '';
+  const interests = prefs.interests || [];
+
+  if (diffs.includes('Strenuous') || diffs.includes('Expert') || elevation === 'steep') {
+    tags.push('🏔️ Peak Bagger');
+    descriptions.push('You crave steep climbs and epic heights. The harder the trail, the better the experience for you.');
+  }
+
+  if (features.includes('Shaded') || features.includes('Water')) {
+    tags.push('🌳 Forest Bather');
+    descriptions.push('You find peace under dense canopies and beside babbling brooks. Shaded, natural trails are your sanctuary.');
+  }
+
+  if (features.includes('Scenic') || features.includes('Summit')) {
+    tags.push('📸 Vista Chaser');
+    descriptions.push('You hike for the reward. High-definition panoramic views and photogenic landscapes are your main motivation.');
+  }
+
+  if (length === 'long' || length === 'verylong') {
+    tags.push('🏃 Endurance Challenger');
+    descriptions.push('Distance is just a number. You love long-haul treks that test your stamina and keep you out in the wild all day.');
+  }
+
+  if (interests.includes('🍔 Eat nearby')) {
+    tags.push('🍔 Post-Trail Foodie');
+    descriptions.push('For you, the perfect hike ends with a great meal. You love discovering local bites and post-trail cuisines.');
+  }
+
+  if (prefs.accessibility?.length > 0) {
+    tags.push('🚶 Accessible Explorer');
+    descriptions.push('You prioritize smooth, paved, and barrier-free trails that ensure everyone in the group can participate comfortably.');
+  }
+
+  if (tags.length === 0) {
+    tags.push('🌿 Casual Cruiser');
+    descriptions.push('You prefer relaxing, gentle strolls. For you, hiking is about unwinding and enjoying nature at your own pace.');
+  }
+
+  return {
+    title: tags.join(' + '),
+    tags,
+    essay: descriptions.join(' '),
+  };
+}
+
 export default function Personalize() {
   const [prefs, setPrefs] = useState({
     interests: ['Hiking'], // Default to hiking
@@ -251,6 +305,42 @@ export default function Personalize() {
         </div>
 
         <div className="space-y-8">
+
+          {/* ── HIKER VIBE (Lumina Style) ── */}
+          {(() => {
+            const vibe = getHikerVibe(prefs);
+            if (!vibe) return null;
+            return (
+              <motion.section
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="rounded-2xl border border-indigo-500/30 bg-gradient-to-br from-indigo-950/40 to-slate-900/60 p-6 shadow-xl"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-500/10 border border-indigo-400/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-300">
+                      ✨ AI Hiker Vibe
+                    </span>
+                    <h2 className="mt-2 text-xl font-bold text-white">Your Trail DNA</h2>
+                  </div>
+                  <span className="text-3xl">🧭</span>
+                </div>
+                
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {vibe.tags.map(tag => (
+                    <span key={tag} className="inline-flex items-center rounded-lg bg-indigo-900/40 border border-indigo-800/40 px-3 py-1 text-xs font-semibold text-indigo-300">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="p-4 rounded-xl bg-black/20 border border-indigo-500/10">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 block mb-1">Your Portrait</span>
+                  <p className="text-sm leading-relaxed text-slate-300 italic">{vibe.essay}</p>
+                </div>
+              </motion.section>
+            );
+          })()}
 
           {/* ── APPEARANCE ── */}
           <section className="rounded-2xl border border-[var(--app-border)] bg-[var(--app-surface)] p-6 transition-colors">

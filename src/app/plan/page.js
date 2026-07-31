@@ -57,14 +57,26 @@ export default function PlanPage() {
   }
 
   function download() {
-    const blob = new Blob([formatPlanDownload(plan)], { type: 'text/plain;charset=utf-8' });
+    const gpxContent = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Odyssey">
+  <metadata>
+    <name>${plan.title}</name>
+    <desc>${plan.aiBrief?.text || plan.summary}</desc>
+  </metadata>
+  ${plan.days.map(day => `
+  <wpt lat="${day.lat || 0}" lon="${day.lng || 0}">
+    <name>Day ${day.day}: ${day.name}</name>
+    <desc>${day.area} · ${day.difficulty} · ${day.distance}</desc>
+  </wpt>`).join('')}
+</gpx>`;
+    const blob = new Blob([gpxContent], { type: 'application/gpx+xml' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `${plan.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.txt`;
+    anchor.download = `${plan.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.gpx`;
     anchor.click();
     URL.revokeObjectURL(url);
-    setMessage('Plan downloaded. Map tiles and live conditions are not included.');
+    setMessage('GPX file downloaded. Import into your GPS app or mapping software.');
   }
 
   return (

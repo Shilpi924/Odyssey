@@ -97,6 +97,7 @@ function withPlanningPreferences(preferences, searchParams) {
 
 function TrailPin({ trail, index, isSelected, onClick }) {
   const markerRef = useRef(null);
+  const diffBadge = getDiff(trail.difficulty);
   useEffect(() => {
     const element = markerRef.current?.getElement?.();
     if (!element) return;
@@ -107,20 +108,26 @@ function TrailPin({ trail, index, isSelected, onClick }) {
     <Marker ref={markerRef} longitude={trail.lng} latitude={trail.lat} onClick={(event) => { event.originalEvent.stopPropagation(); onClick(); }} style={{ zIndex: isSelected ? 100 : 10 }}>
       <div
         className="flex flex-col items-center cursor-pointer"
-        style={{ transform: isSelected ? 'scale(1.3)' : 'scale(1)', transition: 'transform 0.2s' }}
+        style={{ transform: isSelected ? 'scale(1.4)' : 'scale(1)', transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)' }}
       >
         <div
-          className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-white text-xs font-bold shadow-lg"
+          className="relative flex h-10 w-10 items-center justify-center rounded-full border-3 border-white text-sm font-bold shadow-xl"
           style={{
-            backgroundColor: isSelected ? 'var(--app-accent)' : 'var(--app-primary-strong)',
-            color: isSelected ? 'var(--app-bg)' : '#ffffff',
+            backgroundColor: isSelected ? diffBadge.pin : diffBadge.pin,
+            color: '#ffffff',
+            boxShadow: `0 4px 14px ${diffBadge.pin}66, 0 2px 4px rgba(0,0,0,0.3)`,
           }}
         >
-          {index + 1}
+          <span className="drop-shadow-md">{index + 1}</span>
+          {isSelected && (
+            <div className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-white border-2 border-emerald-400 flex items-center justify-center">
+              <span className="text-emerald-600 text-xs">✓</span>
+            </div>
+          )}
         </div>
         <div
-          className="h-2 w-0.5"
-          style={{ backgroundColor: isSelected ? 'var(--app-accent)' : 'var(--app-primary-strong)' }}
+          className="h-3 w-1 rounded-full"
+          style={{ backgroundColor: diffBadge.pin }}
         />
       </div>
     </Marker>
@@ -140,25 +147,25 @@ function UserPin({ position, heading }) {
   return (
     <Marker ref={userMarkerRef} longitude={position.lng} latitude={position.lat} style={{ zIndex: 200 }}>
       <div className="flex flex-col items-center gap-1">
-        <div className="bg-blue-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-lg border border-blue-400 whitespace-nowrap">
-          📍 You are here
+        <div className="bg-gradient-to-r from-blue-500 to-cyan-400 text-white text-[10px] font-bold px-3 py-1.5 rounded-full shadow-lg border border-white/50 whitespace-nowrap backdrop-blur-sm">
+          📍 You
         </div>
-        <div className="w-0.5 h-2 bg-blue-500" />
+        <div className="w-0.5 h-2 bg-gradient-to-b from-blue-400 to-cyan-400" />
         <div className="relative flex items-center justify-center">
           {/* Compass Direction Cone */}
           {heading !== null && (
             <div 
-              className="absolute w-16 h-16 pointer-events-none transition-transform duration-300 ease-out"
+              className="absolute w-20 h-20 pointer-events-none transition-transform duration-300 ease-out"
               style={{ 
                 transform: `rotate(${rotation}deg)`,
-                background: 'radial-gradient(circle at top, rgba(59,130,246,0.3) 0%, rgba(59,130,246,0) 70%)',
-                clipPath: 'polygon(50% 50%, 20% 0%, 80% 0%)',
-                top: '-24px'
+                background: 'radial-gradient(circle at top, rgba(59,130,246,0.4) 0%, rgba(59,130,246,0) 70%)',
+                clipPath: 'polygon(50% 50%, 15% 0%, 85% 0%)',
+                top: '-32px'
               }}
             />
           )}
-          <div className="absolute w-10 h-10 bg-blue-500/30 rounded-full animate-ping" />
-          <div className="w-5 h-5 bg-blue-500 border-2 border-white rounded-full shadow-lg" />
+          <div className="absolute w-12 h-12 bg-blue-400/40 rounded-full animate-ping" />
+          <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-cyan-400 border-3 border-white rounded-full shadow-2xl" />
         </div>
       </div>
     </Marker>
@@ -483,15 +490,41 @@ function HikeSearchContent() {
     try {
       let route = routeGeometries[trail.placeId] || null;
       if (!route && navigator.onLine) route = await fetchOfflineRoute(trail);
+      
+      // Generate GPX file for download
+      const gpxContent = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Odyssey">
+  <metadata>
+    <name>${trail.name}</name>
+    <desc>${trail.difficulty} · ${trail.length || 'Unknown length'} · ${trail.elevationGain || 'Unknown elevation'}</desc>
+  </metadata>
+  <trk>
+    <name>${trail.name}</name>
+    <trkseg>
+      ${route?.coordinates ? route.coordinates.map(coord => Array.isArray(coord[0]) 
+        ? coord.map(c => `<trkpt lat="${c[1]}" lon="${c[0]}"></trkpt>`).join('')
+        : `<trkpt lat="${coord[1]}" lon="${coord[0]}"></trkpt>`
+      ).join('') : `<trkpt lat="${trail.lat}" lon="${trail.lng}"></trkpt>`}
+    </trkseg>
+  </trk>
+</gpx>`;
+      
+      const blob = new Blob([gpxContent], { type: 'application/gpx+xml' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `${trail.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.gpx`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      
+      // Also save to IndexedDB for offline use in app
       await db.savedHikes.put(createSavedHike(trail, route));
       if (route) {
         setRouteGeometries(previous => ({ ...previous, [trail.placeId]: route }));
         setRouteGeometryStatus(previous => ({ ...previous, [trail.placeId]: 'loaded' }));
       }
       setSavedIds(previous => new Set(previous).add(`${trail.name}-${trail.lat}`));
-      setNotice(route
-        ? `${trail.name} facts and route are saved on this device. The basemap still requires a connection.`
-        : `${trail.name} facts are saved on this device. No offline route line is available from this source.`);
+      setNotice(`${trail.name} GPX file downloaded. Import into your GPS app or mapping software.`);
     } catch (downloadError) {
       console.error('Failed to download trail:', downloadError);
       setNotice('This trail could not be downloaded. Check your connection and try again.');
@@ -2035,7 +2068,7 @@ function HikeSearchContent() {
                 longitude: mapCenter?.lng || trails[0]?.lng || -122.4194,
                 latitude: mapCenter?.lat || trails[0]?.lat || 37.7749,
                 zoom: mapZoom,
-                pitch: 0,
+                pitch: 45,
                 bearing: 0
               }}
               mapStyle={getMapStyle(resolvedTheme, isOffline)}
