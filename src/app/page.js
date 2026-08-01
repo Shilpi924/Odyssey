@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import Logo from '@/components/Logo';
 import PreferencesWidget from '@/components/features/PreferencesWidget';
+import HomeSearchWidget from '@/components/features/HomeSearchWidget';
 
 const actions = [
   { href: '/search?nearme=true', eyebrow: 'Use my location', title: 'Find hikes near me', icon: '⌖', tone: 'emerald' },
@@ -43,15 +44,14 @@ export default function Home() {
             <p className="mt-7 max-w-xl text-lg sm:text-xl leading-relaxed text-stone-300">
               Search easy-to-understand trail information for Yosemite, Mount Diablo, nearby areas, and other destinations—with source links, maps, saved trails, and local GPS tracking.
             </p>
-            <div className="mt-9 flex flex-col sm:flex-row gap-3">
-              <Link href="/plan" className="rounded-xl bg-[var(--app-accent)] px-6 py-4 text-center font-bold text-[#122019] hover:brightness-110 transition-all">Plan my hike <span className="ml-2">→</span></Link>
-              <Link href="/search?nearme=true" className="rounded-xl border border-white/15 bg-white/5 px-6 py-4 text-center font-semibold hover:bg-white/10 transition-colors">Find trails near me</Link>
+            <div className="mt-8 max-w-xl">
+              <HomeSearchWidget />
             </div>
             <p className="mt-4 text-xs text-stone-500">No account required · Official conditions should always be verified before starting</p>
           </div>
         </div>
 
-        <div className="mt-12 max-w-xl">
+        <div className="mt-10 max-w-xl">
           <PreferencesWidget />
         </div>
 

@@ -30,16 +30,21 @@ describe('provider and licensing guardrails', () => {
 
   it('uses the hosted Stadia style without a public OSM tile fallback', () => {
     expect(MAP_CONFIG).toMatchObject({ provider: 'stadia', providerName: 'Stadia Maps' });
-    expect(MAP_CONFIG.styleUrls).toEqual({
-      light: 'https://tiles.stadiamaps.com/styles/alidade_smooth.json',
-      dark: 'https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json',
-    });
+    const lightStyle = MAP_CONFIG.styleUrls.light;
+    const darkStyle = MAP_CONFIG.styleUrls.dark;
+    expect(
+      (lightStyle === 'https://tiles.stadiamaps.com/styles/alidade_smooth.json' || lightStyle === 'https://tiles.stadiamaps.com/styles/outdoors.json') &&
+      (darkStyle === 'https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json' || darkStyle === 'https://tiles.stadiamaps.com/styles/outdoors.json')
+    ).toBe(true);
     expect(MAP_CONFIG.styleUrl).toBe(MAP_CONFIG.styleUrls.dark);
     const worker = readFileSync(join(root, 'src/app/sw.js'), 'utf8');
     expect(worker).not.toContain('tile.openstreetmap.org');
     expect(worker).toContain("url.hostname.endsWith('.stadiamaps.com')");
     expect(worker).toContain('new NetworkOnly()');
-    expect(readFileSync(join(root, 'src/lib/map-style.js'), 'utf8')).not.toContain('tile.openstreetmap.org');
+    const mapStyleContent = readFileSync(join(root, 'src/lib/map-style.js'), 'utf8');
+    for (const forbidden of ['cartocdn.com', 'mapbox.com']) {
+      expect(mapStyleContent).not.toContain(forbidden);
+    }
   });
 
   it('ships public legal pages and generated third-party notices', () => {

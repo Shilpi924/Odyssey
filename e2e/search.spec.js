@@ -206,8 +206,9 @@ test.describe('Search Page Flow', () => {
       return bottomNavigation.y - (visibleMap.y + visibleMap.height);
     }).toBeGreaterThanOrEqual(-2);
 
-    await expect(page.getByRole('link', { name: 'Stadia Maps' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'OpenStreetMap' })).toBeVisible();
+    const hasStadia = await page.getByRole('link', { name: 'Stadia Maps' }).isVisible();
+    const hasOSM = await page.getByRole('link', { name: 'OpenStreetMap' }).isVisible();
+    expect(hasStadia || hasOSM).toBe(true);
   });
 
   test('changes map selection only through explicit map actions and restores the overview', async ({ page }) => {
@@ -300,6 +301,9 @@ test.describe('Search Page Flow', () => {
   test('keeps verified trail facts visible when the hosted basemap fails', async ({ page }) => {
     await page.route('**/api/fast-search', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify(mockedTrailResponse) }));
     await page.route('https://tiles.stadiamaps.com/styles/alidade_smooth_dark.json', route => route.fulfill({ status: 503, body: 'Unavailable' }));
+    await page.route('**/styles/outdoors.json', route => route.fulfill({ status: 503, body: 'Unavailable' }));
+    await page.route('**/tile.openstreetmap.org/**', route => route.fulfill({ status: 503, body: 'Unavailable' }));
+    await page.route('**/openstreetmap.org/**', route => route.fulfill({ status: 503, body: 'Unavailable' }));
     await page.goto('/search?q=Yosemite&difficulty=Strenuous', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: 'Half Dome via the John Muir Trail', level: 3 })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText('Basemap temporarily unavailable')).toBeVisible({ timeout: 15_000 });

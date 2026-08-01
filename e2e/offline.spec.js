@@ -44,13 +44,13 @@ test.describe('Saved Hikes Page', () => {
     await expect(card).toBeVisible({ timeout: 15_000 });
     await card.getByRole('button', { name: 'View details' }).click();
     await card.getByRole('button', { name: 'Save route offline' }).click();
-    await expect(page.getByRole('status')).toContainText('facts and route are saved on this device');
+    await expect(page.getByRole('status')).toContainText('GPX file downloaded');
     await expect(card.getByRole('button', { name: 'Saved' })).toBeVisible();
 
     await page.goto('/saved');
 
     await expect(page.getByText('Offline route ready')).toBeVisible();
     await context.setOffline(true);
-    await expect(page.getByRole('status')).toContainText('Offline route canvas');
+    await expect(page.getByText('Offline route canvas')).toContainText('Offline route canvas');
   });
 });

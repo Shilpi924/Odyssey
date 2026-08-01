@@ -18,7 +18,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'npm run dev',
+    command: 'NEXT_PUBLIC_USE_OSM_MAP=false npm run dev',
     url: 'http://localhost:3007',
     reuseExistingServer: !process.env.CI,
   },

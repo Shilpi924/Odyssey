@@ -2068,7 +2068,7 @@ function HikeSearchContent() {
                 longitude: mapCenter?.lng || trails[0]?.lng || -122.4194,
                 latitude: mapCenter?.lat || trails[0]?.lat || 37.7749,
                 zoom: mapZoom,
-                pitch: 45,
+                pitch: 0,
                 bearing: 0
               }}
               mapStyle={getMapStyle(resolvedTheme, isOffline)}
